@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted and Validated
 
 ## Context
 
@@ -104,3 +104,17 @@ Reasons:
 - Record the Puppet Agent version required by the supported target module. PDK 4.0.1 itself has no declared Puppet Agent package dependency; Agent installation remains deferred until a module runtime requirement is established.
 - Pin Bundler 2.4.20 with Ruby 3.2.3 and validate the module workflow in the completed image.
 - Document rebuild and upgrade procedures.
+
+## Validation
+
+Validated on 2026-11-18.
+
+Results:
+
+- BuildKit secret consumption verified.
+- PDK 4.0.1 installation verified.
+- Runtime image contains no Puppet repository credentials.
+- No credentials detected in image layers.
+- No credentials detected in build output.
+- Runtime diagnostics passed.
+
