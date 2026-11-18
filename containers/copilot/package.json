@@ -1,0 +1,9 @@
+{
+  "name": "agentforge-copilot-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned Copilot CLI runtime for the AgentForge workstation",
+  "dependencies": {
+    "@github/copilot": "1.0.112"
+  }
+}

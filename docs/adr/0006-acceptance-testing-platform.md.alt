@@ -1,0 +1,47 @@
+# ADR-0006: Acceptance Testing Platform
+
+- Status: Proposed
+- Date: 2026-11-18
+- Deciders: AgentForge maintainers
+
+## Context
+
+Phase 4 supports PDK validation and unit tests, but not Puppet acceptance tests. Acceptance testing needs a framework and disposable targets while preserving the no-Docker-socket workstation baseline, rootless deployment where practical, and the secret boundaries in ADR-0004 and ADR-0005.
+
+Litmus and Beaker are frameworks; Docker, Podman, KVM, and EC2 are provider/target choices. Their compatibility and security properties depend on the exact module, versions, and execution boundary. No provider has been tested or enabled.
+
+## Proposed decision
+
+- Use Litmus as the default framework for new acceptance workflows.
+- Investigate rootless Podman targets inside a dedicated, short-lived acceptance-provider boundary. Do not mount Docker or Podman sockets into the normal workstation.
+- Keep Beaker available only as a compatibility path for a concrete module that already requires it.
+- Keep EC2 as an opt-in for a documented need for cloud fidelity or a broader target matrix.
+- Do not use nested KVM by default; consider it only when a module requires full VM fidelity and the operator provides a separate, reviewed virtualization boundary.
+- Gate implementation on a compatibility spike proving provider lifecycle, target connectivity, and cleanup without widening the normal workstation's capabilities.
+
+If Litmus cannot safely operate with rootless Podman, reassess isolated EC2 or submit a separate proposal for a dedicated rootless Docker provider. Do not fall back to a general host Docker socket.
+
+## Alternatives considered
+
+- **Beaker as the default:** Strong compatibility with existing legacy suites, but adds complexity and does not provide a simpler security boundary. Retain for modules that already use it.
+- **Docker socket in the workstation:** Fast and widely supported, but gives the workstation control over a daemon capable of host resource access. Rejected as the default.
+- **Rootless Podman accessed by the workstation:** Avoids the Docker daemon but its API socket remains a powerful capability. Rejected for direct workstation exposure; only a separate isolated acceptance boundary may use it.
+- **Nested KVM:** Provides full-system targets, but requires virtualization device/host-provider access and adds operational complexity. Not the default.
+- **EC2 for all tests:** Strong remote separation and realistic targets, but adds cloud credentials, latency, cost, and provider setup to routine development. Keep opt-in.
+
+## Consequences
+
+- Litmus/Podman versions and compatibility remain unselected until the spike succeeds.
+- A module-specific Puppet Agent version is required before building a target image.
+- Provider images that need protected Puppet packages must follow an approved BuildKit-secret build path; runtime targets receive no Puppet repository credential.
+- Provider credentials, if any, must be short-lived and run-scoped. No authentication data may persist in repositories, workspace, cache, or Copilot state.
+- Phase 5 requires explicit target selection, minimal module artifact staging, resource limits, teardown verification, and failure recovery.
+- ADR-0002's acceptance-provider deferral remains in force until this ADR is accepted. If accepted, this decision supersedes only that deferral; ADR-0004 and ADR-0005 remain unchanged.
+
+## Security and operations
+
+Acceptance execution is opt-in and separate from normal Level 0/Level 1 services. It must not receive the workstation's Docker daemon, host home, persistent Copilot state, broad workspace, or Puppet repository credentials. Rootless Podman reduces privilege but is not a sandbox; any provider API socket is a high-impact capability and must remain inside the isolated, disposable acceptance boundary.
+
+Targets must be disposable, version-pinned, allowlisted, and cleaned up after success, failure, or interruption. Remote provider credentials must be scoped to one run and excluded from logs and persistent storage.
+
+See [Puppet Acceptance Testing Design](../acceptance-testing.md) for the qualitative comparison, proposed workflow, roadmap, and open decisions.

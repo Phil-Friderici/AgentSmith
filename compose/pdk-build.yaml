@@ -1,0 +1,16 @@
+services:
+  agent-level0:
+    build:
+      secrets:
+        - source: puppet_repo_credentials
+          target: puppet_repo_credentials
+
+  agent-level1:
+    build:
+      secrets:
+        - source: puppet_repo_credentials
+          target: puppet_repo_credentials
+
+secrets:
+  puppet_repo_credentials:
+    file: ${PUPPET_REPO_CREDENTIALS:?Set PUPPET_REPO_CREDENTIALS to an external APT auth file for image builds}

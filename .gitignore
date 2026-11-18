@@ -1,0 +1,11 @@
+# Runtime repositories, caches, secrets, and local Compose settings stay outside Git.
+/workspace/*
+!/workspace/README.md
+/cache/*
+!/cache/README.md
+/secrets/
+/.env
+/.env.*
+*.secret
+*.secrets
+**/.copilot/

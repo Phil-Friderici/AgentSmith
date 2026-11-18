@@ -1,0 +1,9 @@
+**
+!Dockerfile
+!agentforge-doctor.sh
+!agentforge-puppet.sh
+!workstation-entrypoint.sh
+!copilot-storage-check.sh
+!copilot/
+!copilot/package.json
+!copilot/package-lock.json

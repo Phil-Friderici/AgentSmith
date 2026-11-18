@@ -1,0 +1,109 @@
+services:
+  agent-level0:
+    image: agentforge-workstation:local
+    build:
+      context: ../containers
+      dockerfile: Dockerfile
+      target: workstation
+    profiles:
+      - level0
+    init: true
+    user: "${HOST_UID:?Set HOST_UID}:${HOST_GID:?Set HOST_GID}"
+    working_dir: /workspace
+    environment:
+      HOME: /tmp
+      AGENTFORGE_LEVEL: "0"
+      COPILOT_AUTO_UPDATE: "false"
+      COPILOT_CACHE_HOME: /tmp/copilot-cache
+      COPILOT_HOME: /copilot
+      COPILOT_OFFLINE: "true"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
+      - /run
+      - /copilot:rw,noexec,nosuid,nodev,size=256m,mode=0700,uid=${HOST_UID:?Set HOST_UID},gid=${HOST_GID:?Set HOST_GID}
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /workspace && ! test -w /workspace && test -w /tmp && test -w /copilot"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - type: bind
+        source: ${AGENTFORGE_WORKSPACE:-${HOME}/AgentForge/workspace}
+        target: /workspace
+        read_only: true
+        bind:
+          create_host_path: false
+    stdin_open: true
+    tty: true
+    command: ["bash"]
+
+  agent-level1:
+    image: agentforge-workstation:local
+    build:
+      context: ../containers
+      dockerfile: Dockerfile
+      target: workstation
+    profiles:
+      - level1
+    init: true
+    user: "${HOST_UID:?Set HOST_UID}:${HOST_GID:?Set HOST_GID}"
+    working_dir: /workspace
+    environment:
+      HOME: /tmp
+      AGENTFORGE_LEVEL: "1"
+      BUNDLE_APP_CONFIG: /tmp/agentforge-bundler-config
+      COPILOT_AUTO_UPDATE: "false"
+      COPILOT_CACHE_HOME: /tmp/copilot-cache
+      COPILOT_HOME: /copilot
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
+      - /run
+      - /copilot:rw,noexec,nosuid,nodev,size=256m,mode=0700,uid=${HOST_UID:?Set HOST_UID},gid=${HOST_GID:?Set HOST_GID}
+    healthcheck:
+      test: ["CMD-SHELL", "test -r /workspace && test -w /workspace && test -w /cache && test -w /tmp && test -r /copilot/settings.json && ! test -w /copilot/settings.json && test -w /copilot/session-state && test -w /copilot/session-store.db"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - type: bind
+        source: ${AGENTFORGE_WORKSPACE:-${HOME}/AgentForge/workspace}
+        target: /workspace
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AGENTFORGE_CACHE:-${HOME}/AgentForge/cache/agentforge/level1}
+        target: /cache
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AGENTFORGE_COPILOT_STATE:-${HOME}/AgentForge/state/copilot}/settings.json
+        target: /copilot/settings.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AGENTFORGE_COPILOT_STATE:-${HOME}/AgentForge/state/copilot}/session-state
+        target: /copilot/session-state
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AGENTFORGE_COPILOT_STATE:-${HOME}/AgentForge/state/copilot}/session-store.db
+        target: /copilot/session-store.db
+        bind:
+          create_host_path: false
+    stdin_open: true
+    tty: true
+    command: ["bash"]
