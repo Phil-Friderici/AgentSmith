@@ -80,8 +80,10 @@ RUN dpkg -i /tmp/pdk.deb \
     && pdk --version | grep --fixed-strings --line-regexp "4.0.1" \
     && rm -f /tmp/pdk.deb
 
+# Issue #1: select UTF-8 so Ruby and PDK metadata validation handle UTF-8 data by default.
 ENV PATH="/opt/node/bin:/opt/copilot/node_modules/.bin:${PATH}" \
-    COPILOT_AUTO_UPDATE=false
+    COPILOT_AUTO_UPDATE=false \
+    LANG=C.UTF-8
 
 COPY --chmod=0555 workstation-entrypoint.sh /usr/local/bin/workstation-entrypoint
 COPY --chmod=0555 agentforge-doctor.sh /usr/local/bin/agentforge-doctor

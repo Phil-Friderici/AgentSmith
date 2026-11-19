@@ -21,8 +21,8 @@ The final image contains PDK 4.0.1, Node.js 22.23.5, and Copilot CLI 1.0.112 but
 - Copilot dependencies are installed in a separate build stage that does not consume or mount the Puppet BuildKit secret.
 - The Compose build override lives in `compose/pdk-build.yaml`; normal runtime commands use `compose/compose.yaml` alone.
 - The final workstation runs unprivileged with only explicitly configured workspace/cache mounts.
-- Level 1 puts the complete `/copilot` home and Copilot cache on tmpfs, then bind-mounts only `settings.json` read-only, `session-state/`, and `session-store.db`.
-- Both Compose profiles allocate a 512 MiB `/tmp` tmpfs. Copilot CLI 1.0.112 extracts about 282 MiB of bundled runtime data there on first use; the diagnostic checks the minimum capacity.
+- Level 1 puts the complete `/copilot` home and Copilot cache on separate tmpfs mounts, then bind-mounts only `settings.json` read-only, `session-state/`, and `session-store.db`. The dedicated 512 MiB `/copilot-cache` tmpfs is executable because Copilot CLI 1.0.112 loads its `cli-native` shared library from the cache; it remains ephemeral and is not a host mount.
+- Both Compose profiles retain a 512 MiB `noexec` `/tmp` tmpfs for scratch data. Level 0 keeps its Copilot cache there; Level 1 uses the dedicated executable cache mount so execution permission is not broadened across general temporary storage.
 - `COPILOT_AUTO_UPDATE=false` disables automatic CLI and plugin updates. Level 0 also sets `COPILOT_OFFLINE=true` and has no persistent Copilot-state mounts.
 - Do not enable privileged mode, broad host mounts, host namespaces, or Docker socket access.
 

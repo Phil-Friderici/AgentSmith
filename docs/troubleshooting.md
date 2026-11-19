@@ -29,6 +29,10 @@ Run `/usr/local/bin/agentforge-doctor` inside the container to repeat the report
 
 Level 0 has `network_mode: none` and `COPILOT_OFFLINE=true`; this is intentional. Level 1 is attached to the Compose network, but the diagnostic does not probe external endpoints. GitHub CLI authentication is not configured. Copilot login is initiated manually inside Level 1; authentication lives only under the ephemeral `/copilot` tmpfs home.
 
+If the browser reports `127.0.0.1` refusing the Copilot login callback, the host browser cannot reach the callback listener inside the container. Retry with `copilot login --device-code`, which does not use a loopback callback. Do not paste the device code into chat or logs.
+
+When starting Copilot with a separate `docker exec`, set `umask 077` in that process; it does not inherit the workstation entrypoint's umask. Otherwise new files in persistent session-state may receive broader mode bits and fail the storage diagnostic. Use the Compose-managed shell where possible.
+
 ## Docker commands cannot reach a daemon
 
 Docker CLI/daemon access is intentionally not exposed inside the workstation. Use Docker Compose on the host to build and start AgentForge. Do not mount `/var/run/docker.sock`; access to the host daemon would bypass the workstation's container boundary.
@@ -43,9 +47,15 @@ Run `agentforge-puppet toolchain /workspace/<module>` and confirm the module's `
 
 Bundler configuration is under ephemeral `/tmp`, and module caches are under `/cache/bundler/<module-id>`. If a cache is corrupt, stop the container and remove only that module's exact cache directory, then rerun `bundle-install`. The workspace Gemfile and lockfile are authoritative; never move credentials into Bundler configuration to work around an inaccessible private source.
 
+## Copilot CLI reports a missing native addon or shared-object mapping error
+
+During Operational Validation Phase 2, `copilot login` exposed that Copilot CLI 1.0.112 extracts `cli-native` into its runtime cache and loads it as a shared library. The original Level 1 cache was under `/tmp`, whose tmpfs is intentionally mounted `noexec`; loading the addon then failed with `failed to map segment from shared object`. Level 1 now uses a dedicated 512 MiB executable `/copilot-cache` tmpfs while general `/tmp` remains `noexec`. The cache is writable only within the container, is discarded on recreation, and is not a host cache or persistent Copilot state. Do not remove `noexec` from `/tmp` or move the Copilot cache into the workspace, host cache, or persistent state.
+
+The startup diagnostic verifies that `/copilot-cache` is a writable, executable tmpfs with at least 512 MiB. If it fails, use the repository Compose configuration and recreate the container; do not broaden execution permissions on other mounts.
+
 ## Copilot CLI reports package extraction or `ENOSPC` errors
 
-Copilot CLI 1.0.112 extracts about 282 MiB of bundled runtime data into its ephemeral cache on first use. Both Compose profiles require `/tmp` to be a writable tmpfs of at least 512 MiB; the startup diagnostic fails if this is not true. Use the repository Compose configuration rather than overriding `/tmp` with a smaller mount. The cache is deliberately ephemeral and must not be moved to workspace, cache, or persistent Copilot state.
+The dedicated Level 1 Copilot cache and both profiles' `/tmp` tmpfs each have a 512 MiB capacity for runtime extraction and scratch data. Do not reduce these limits or move the cache to a persistent path.
 
 ## PDK image build or package access fails
 

@@ -60,7 +60,7 @@ services:
       AGENTFORGE_LEVEL: "1"
       BUNDLE_APP_CONFIG: /tmp/agentforge-bundler-config
       COPILOT_AUTO_UPDATE: "false"
-      COPILOT_CACHE_HOME: /tmp/copilot-cache
+      COPILOT_CACHE_HOME: /copilot-cache
       COPILOT_HOME: /copilot
     read_only: true
     cap_drop:
@@ -71,6 +71,7 @@ services:
       - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
       - /run
       - /copilot:rw,noexec,nosuid,nodev,size=256m,mode=0700,uid=${HOST_UID:?Set HOST_UID},gid=${HOST_GID:?Set HOST_GID}
+      - /copilot-cache:rw,exec,nosuid,nodev,size=512m,mode=0700,uid=${HOST_UID:?Set HOST_UID},gid=${HOST_GID:?Set HOST_GID}
     healthcheck:
       test: ["CMD-SHELL", "test -r /workspace && test -w /workspace && test -w /cache && test -w /tmp && test -r /copilot/settings.json && ! test -w /copilot/settings.json && test -w /copilot/session-state && test -w /copilot/session-store.db"]
       interval: 30s

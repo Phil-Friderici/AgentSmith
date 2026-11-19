@@ -74,6 +74,21 @@ is_tmpfs_mount() {
     awk -v target="$path" '$2 == target && $3 == "tmpfs" { found = 1 } END { exit !found }' /proc/mounts
 }
 
+is_exec_tmpfs_mount() {
+    local path="$1"
+    awk -v target="$path" '
+        $2 == target && $3 == "tmpfs" {
+            count = split($4, options, ",")
+            has_noexec = 0
+            for (i = 1; i <= count; i++) {
+                if (options[i] == "noexec") has_noexec = 1
+            }
+            if (!has_noexec) found = 1
+        }
+        END { exit !found }
+    ' /proc/mounts
+}
+
 copilot_mounts_allowed() {
     awk '
         $2 ~ /^\/copilot\// \
@@ -135,7 +150,8 @@ check_ruby_gem "beaker" "Phase 6"
 
 if ! command -v copilot >/dev/null 2>&1; then
     report "FAIL" "Copilot CLI" "required Phase 3 tool is not installed"
-elif copilot --version 2>/dev/null | grep --quiet --fixed-strings "GitHub Copilot CLI 1.0.112."; then
+elif copilot_version="$(copilot --version 2>/dev/null)" \
+    && [[ "$copilot_version" == *"GitHub Copilot CLI 1.0.112."* ]]; then
     report "PASS" "Copilot CLI" "1.0.112"
 else
     report "FAIL" "Copilot CLI" "expected version 1.0.112"
@@ -198,10 +214,17 @@ else
 fi
 
 if [[ "$level" == "0" || "$level" == "1" ]]; then
-    if [[ "${COPILOT_CACHE_HOME:-}" == "/tmp/copilot-cache" ]]; then
-        report "PASS" "Copilot cache" "ephemeral under /tmp"
+    if [[ "$level" == "0" ]] \
+        && [[ "${COPILOT_CACHE_HOME:-}" == "/tmp/copilot-cache" ]]; then
+        report "PASS" "Copilot cache" "ephemeral under non-executable /tmp"
+    elif [[ "$level" == "1" ]] \
+        && [[ "${COPILOT_CACHE_HOME:-}" == "/copilot-cache" ]] \
+        && [[ -d /copilot-cache && -w /copilot-cache ]] \
+        && is_exec_tmpfs_mount /copilot-cache \
+        && has_minimum_tmpfs_capacity /copilot-cache 524288; then
+        report "PASS" "Copilot cache" "dedicated writable 512 MiB executable tmpfs"
     else
-        report "FAIL" "Copilot cache" "COPILOT_CACHE_HOME must remain under ephemeral /tmp"
+        report "FAIL" "Copilot cache" "expected the profile's approved ephemeral cache mount"
     fi
 fi
 
@@ -282,7 +305,7 @@ if [[ "$level" == "1" ]]; then
     if /usr/local/bin/copilot-storage-check mounted-state \
         /copilot/settings.json /copilot/session-state /copilot/session-store.db \
         && /usr/local/bin/copilot-storage-check workspace-cache /workspace /cache \
-        && /usr/local/bin/copilot-storage-check runtime-cache /tmp/copilot-cache; then
+        && /usr/local/bin/copilot-storage-check runtime-cache /copilot-cache; then
         report "PASS" "Copilot storage" "no authentication artifacts detected in persistent, workspace, or cache paths"
     else
         report "FAIL" "Copilot storage" "authentication artifact or invalid state detected; inspect paths without printing file contents"

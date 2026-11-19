@@ -31,7 +31,7 @@ The supported workstation Ruby is exactly 3.2.3 and Bundler is exactly 2.4.20. N
 
 ## Copilot authentication and update policy
 
-The image sets `COPILOT_AUTO_UPDATE=false`. Copilot CLI 1.0.112 documents that this disables automatic CLI downloads and plugin updates at session startup. The explicit `copilot update` command remains available to an operator but is not run automatically. `COPILOT_CACHE_HOME` points to ephemeral storage and is not mounted.
+The image sets `COPILOT_AUTO_UPDATE=false`. Copilot CLI 1.0.112 documents that this disables automatic CLI downloads and plugin updates at session startup. The explicit `copilot update` command remains available to an operator but is not run automatically. In Level 1, `COPILOT_CACHE_HOME` points to the dedicated executable `/copilot-cache` tmpfs required for the CLI's native addon; Level 0 keeps its cache under non-executable `/tmp`. Neither cache is host-mounted or persistent.
 
 The CLI documents `config.json` as managed state that can include signed-in accounts, and its login help warns that tokens may fall back to plaintext there if no credential store is available. The file is not persisted. A successful login was not performed during implementation; verifying actual files created/modified and authentication loss after container recreation is a future operational task.
 

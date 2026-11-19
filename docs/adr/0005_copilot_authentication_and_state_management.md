@@ -3,6 +3,7 @@
 ## Status
 
 Accepted
+Validated on 2026-11-18 through Operational Validation Phase 2.
 
 ## Context
 
@@ -201,3 +202,139 @@ Any future proposal must demonstrate:
 - Verify that authentication artifacts do not survive container recreation.
 - Verify that no authentication data enters repositories, workspace mounts, or cache volumes.
 - Reassess persistent authentication only through a future ADR.
+
+## ADR-0005 Validation Status
+
+### Operational Validation
+
+Validated on 2026-11-18.
+
+ADR-0005 has been successfully validated through Operational Validation Phase 2.
+
+The validation confirmed that AgentForge's separation between authentication state and persistent Copilot state functions as designed.
+
+### Validation Results
+
+#### Authentication Storage
+
+A successful operator-initiated GitHub Copilot CLI login was completed.
+
+When no Linux credential store was available, Copilot CLI 1.0.112 stored authentication state in:
+
+```text
+/copilot/config.json
+```
+
+The file contained authentication markers and token-like content as expected.
+
+Validation confirmed:
+
+- Authentication data remained exclusively within the ephemeral `/copilot` tmpfs.
+- Authentication data was not written to approved persistent state storage.
+- Authentication data was not written to workspace paths.
+- Authentication data was not written to cache paths.
+- Authentication data was not written to environment configuration.
+
+#### State Persistence
+
+The following approved state persisted across container recreation:
+
+- `settings.json`
+- `session-state/`
+- `session-store.db`
+
+Settings and session content remained available after container recreation.
+
+#### Authentication Volatility
+
+Container recreation removed all authentication state.
+
+Validation confirmed:
+
+- `/copilot/config.json` disappeared after recreation.
+- Reauthentication was required.
+- Authentication state did not survive container lifecycle events.
+
+This behaviour is the intended security boundary defined by ADR-0005.
+
+#### Logging
+
+Process logs remained ephemeral.
+
+No authentication artifacts were found in:
+
+- persistent settings storage
+- persistent session storage
+- workspace storage
+- cache storage
+
+No credential values or device codes were displayed during validation.
+
+#### Logout Behaviour
+
+Copilot CLI 1.0.112 does not provide a supported logout command.
+
+Container recreation successfully removed authentication state and required reauthentication.
+
+AgentForge therefore defines:
+
+```text
+Container recreation
+=
+Authenticated session termination
+```
+
+This is the supported operational logout procedure.
+
+### Operational Caveat
+
+Direct execution through:
+
+```bash
+docker exec ...
+```
+
+uses:
+
+```text
+umask 0022
+```
+
+while the documented Compose-managed shell enforces:
+
+```text
+umask 077
+```
+
+Validation identified permission differences for certain session metadata created during direct container access.
+
+Recommendations:
+
+- Prefer the documented Compose-managed shell.
+- When using `docker exec`, set:
+
+```bash
+umask 077
+```
+
+before running Copilot CLI commands.
+
+This observation does not affect the authentication boundary or persistence model defined by ADR-0005.
+
+### Conclusion
+
+ADR-0005 is considered operationally validated.
+
+The following architectural requirements have been verified:
+
+- Ephemeral authentication ✅
+- Persistent approved settings ✅
+- Persistent session state ✅
+- No credential persistence ✅
+- No credentials in repository paths ✅
+- No credentials in workspace paths ✅
+- No credentials in cache paths ✅
+- Authentication removed by container recreation ✅
+- Reauthentication required after recreation ✅
+
+The authentication and persistence model defined by ADR-0005 is accepted as the validated AgentForge baseline.
