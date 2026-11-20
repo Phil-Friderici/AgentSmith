@@ -19,12 +19,19 @@ Run module commands inside a Level 1 workstation:
 
 ```sh
 agentforge-puppet toolchain /workspace/example_module
-agentforge-puppet bundle-install /workspace/example_module
 agentforge-puppet validate /workspace/example_module
 agentforge-puppet unit /workspace/example_module
 ```
 
-`unit` performs the project-scoped bundle install before `pdk test unit`. The cache is disposable; the module's Gemfile and lockfile in `/workspace` are the dependency source of truth. Use [Puppet Module Development](puppet-development.md) for bootstrap, fork conventions, supported versions, and safe cache recovery. Do not put private gem credentials in repository configuration, environment variables, or caches.
+`unit` invokes `pdk test unit` directly; PDK uses its managed Ruby/Bundler and owns dependency resolution for that command. `bundle-install` is a separate system-Ruby workflow. Do not run it before PDK commands because it can replace the module lockfile with dependencies selected for a different Ruby, Puppet, Bundler, and gem-source configuration. The cache is disposable; the module's Gemfile and lockfile in `/workspace` are the dependency source of truth. Use [Puppet Module Development](puppet-development.md) for bootstrap, fork conventions, supported versions, and safe cache recovery. Do not put private gem credentials in repository configuration, environment variables, or caches.
+
+PDK's packaged dependency cache can satisfy PuppetCore-sourced dependencies without runtime credentials. If PDK reports an authentication error, inspect the lockfile's `BUNDLED WITH`, Puppet/Bolt versions, and source entries before changing configuration. Never add PuppetCore credentials to the runtime as a workaround.
+
+Use the standalone bundle only when a specific system-Ruby `bundle exec` workflow requires it:
+
+```sh
+agentforge-puppet bundle-install /workspace/example_module
+```
 
 ## Rebuild and recovery
 
@@ -49,7 +56,7 @@ To restart from a clean container, exit the shell and run the selected Compose c
 
 The Puppet workflow hashes each canonical module path to place Bundler gems and package cache under its own `/cache/bundler/<module-id>/` directory. Bundler application configuration is kept under `/tmp`. The host cache path should also be scoped by project and trust level. Caches are disposable and may contain private package metadata or untrusted artifacts. Do not place credentials or auth files there. Cache invalidation is an operator action: stop the workstation, identify the exact configured module cache path, and remove only that cache.
 
-PDK is installed in the image and persists across container recreation; it does not depend on a runtime cache. Litmus, Beaker, and Puppet download caches are not configured. Phase 5 provider behavior is design-only; see [Puppet Acceptance Testing Design](acceptance-testing.md). Add caches only with a reviewed version and lifecycle policy.
+PDK is installed in the workstation image and persists across container recreation; it does not depend on a runtime cache. Acceptance-test dependencies and caches are isolated from the normal workstation profiles. Phase 5a is operationally validated, and Phase 5b compatibility and integration validation is complete; Phase 5b production hardening remains future work. See [Puppet Acceptance Testing Design](acceptance-testing.md). Add caches only with a reviewed version and lifecycle policy.
 
 ## PDK package and image lifecycle
 
@@ -57,13 +64,19 @@ PDK 4.0.1 is installed into the workstation image during build, so it remains av
 
 The exact package version is `4.0.1.1-1noble`. To upgrade or reinstall, update the Dockerfile and [Toolchain Versions](toolchain-versions.md), then rebuild with the secret. Use `--no-cache` when an explicit package re-download is required. Do not put credential contents in build args, environment variables, or local files inside the build context.
 
-The protected package fetch, build logs, and layer-leak checks have not been validated with an actual credential in this environment.
+The protected PDK build was previously validated with authorized credentials, including image-layer, runtime-image, and build-log checks. It has not been rerun in the current environment because no external credential source is available.
 
 ## Authentication and permissions
 
-Level 1 supports operator-initiated ephemeral Copilot authentication; GitHub CLI authentication is not configured. Level 0 is offline and has no persistent Copilot state. Level 2 and Level 3 are not implemented. Copilot 1.0.112 may fall back to storing token information in `config.json`, so the entire `/copilot` home is tmpfs. The pinned CLI has no standalone `logout` subcommand; recreating/removing the container is the guaranteed way to discard authentication. Do not mount host credential directories, persist Copilot's auth-bearing configuration, or use the Docker socket as a workaround.
+Level 1 supports operator-initiated ephemeral Copilot authentication. GitHub CLI 2.105.0, `agentforge-gh`, and `agentforge-gh-auth` are installed in the Level 1 image only; Level 0 has none and remains offline. Level 1 sets `GH_CONFIG_DIR=/tmp/agentforge-gh/config`; startup creates it with mode 0700 on the `/tmp` tmpfs, empty on each container start. The wrapper permits only the documented metadata commands for exact repositories in `containers/github-allowlist.yml`, currently `Phil-Friderici/puppetlabs-mysql` and `Phil-Friderici/puppetlabs-concat`.
+
+To store an operator-provided fine-grained, read-only, repository-scoped PAT, run `agentforge-gh-auth store` in the interactive Level 1 shell and enter the token at the hidden prompt. Use `agentforge-gh-auth status` to check local token format and storage properties without making a GitHub request; `agentforge-gh-auth clear` removes it. The PAT resides at `/tmp/agentforge-gh/pat` with mode 0600 on tmpfs; it is not persisted, mounted, logged, or printed. Container recreation removes it. AgentForge cannot verify GitHub permissions, repository scope, or whether the token is active. Direct `gh` usage remains outside the validated AgentForge wrapper surface. Level 2 and Level 3 are not implemented.
+
+Copilot 1.0.112 may fall back to storing token information in `config.json`, so the entire `/copilot` home is tmpfs. The pinned CLI has no standalone `logout` subcommand; recreating/removing the container is the guaranteed way to discard authentication. Do not mount host credential directories, persist Copilot's auth-bearing configuration, or use the Docker socket as a workaround.
 
 The Copilot state directory is `~/AgentForge/state/copilot` by default. Only `settings.json` (read-only in the container), `session-state/`, and `session-store.db` persist; each is mounted individually. Authentication configuration, credential caches, process logs, MCP configuration, personal instructions, plugins, and the rest of `COPILOT_HOME` remain ephemeral. Session history can contain project data and must follow owner-only permissions, retention, and cleanup policy. Never enter credentials into prompts or commands that may be captured in session history. Do not back up authentication data. Persistent session backups, if enabled, should be encrypted and subject to the same retention restrictions.
+
+Do not pass a GitHub PAT as a command argument or environment variable, paste it into chat, or store it in the workspace or cache. Authenticated `repo view` and empty PR-list requests succeeded for the current two allowlisted repositories. Their issues are disabled and they have no PRs or releases; see the [Phase 6a authenticated validation report](phase6a-authenticated-validation-report.md).
 
 Review sessions weekly and prune inactive sessions older than 30 days with `/session prune` from a Copilot session. A cleanup should operate only on session-state data, never on an authentication file. The SQLite session index may need to be updated through the CLI rather than edited directly. No automatic backup or cleanup service is installed.
 
@@ -71,4 +84,4 @@ To revoke build access, stop using the build-only override and remove the source
 
 ## Upgrading
 
-Base image digests, APT package versions, PDK/Bundler versions, Node.js 22.23.5, and Copilot CLI 1.0.112 are explicit pins. `COPILOT_AUTO_UPDATE=false` disables automatic CLI and plugin updates. Review updates deliberately, test Compose profiles and the environment diagnostic, and document material decisions in an ADR. Do not change pins to floating `latest` tags or silently select a Puppet Agent version. See [Toolchain Versions](toolchain-versions.md).
+Base image digests, APT package versions, PDK/Bundler versions, Node.js 22.23.5, Copilot CLI 1.0.112, and Level 1 GitHub CLI 2.105.0 are explicit pins. `COPILOT_AUTO_UPDATE=false` disables automatic CLI and plugin updates. Review updates deliberately, test Compose profiles and the environment diagnostic, and document material decisions in an ADR. Do not change pins to floating `latest` tags or silently select a Puppet Agent version. See [Toolchain Versions](toolchain-versions.md).

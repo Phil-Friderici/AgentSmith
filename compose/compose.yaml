@@ -45,11 +45,11 @@ services:
     command: ["bash"]
 
   agent-level1:
-    image: agentforge-workstation:local
+    image: agentforge-workstation-level1:local
     build:
       context: ../containers
       dockerfile: Dockerfile
-      target: workstation
+      target: workstation-level1
     profiles:
       - level1
     init: true
@@ -62,6 +62,7 @@ services:
       COPILOT_AUTO_UPDATE: "false"
       COPILOT_CACHE_HOME: /copilot-cache
       COPILOT_HOME: /copilot
+      GH_CONFIG_DIR: /tmp/agentforge-gh/config
     read_only: true
     cap_drop:
       - ALL

@@ -96,3 +96,55 @@ USER 1000:1000
 
 ENTRYPOINT ["/usr/local/bin/workstation-entrypoint"]
 CMD ["bash"]
+
+FROM workstation AS workstation-level1
+
+USER root
+
+ARG TARGETARCH
+
+RUN set -eu; \
+    gh_version=2.105.0; \
+    case "$TARGETARCH" in \
+        amd64) gh_arch=amd64; gh_sha256=1dac939af3e84fb3861927c984b357531341be9403b889e4aa86e8822145a09d ;; \
+        arm64) gh_arch=arm64; gh_sha256=d17e9b089ce0356679c9fa1898f3a7d38dccf943d529acaa94c24e8a4584e0ae ;; \
+        *) printf 'Unsupported GitHub CLI build architecture: %s\n' "$TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    package="/tmp/gh_${gh_version}_${gh_arch}.deb"; \
+    curl --fail --location --silent --show-error \
+        --output "$package" \
+        "https://cli.github.com/packages/pool/main/g/gh/gh_${gh_version}_${gh_arch}.deb"; \
+    printf '%s  %s\n' "$gh_sha256" "$package" | sha256sum --check -; \
+    dpkg -i "$package"; \
+    installed_version="$(gh --version | sed -n '1s/^gh version //p' | cut -d' ' -f1)"; \
+    test "$installed_version" = "$gh_version"; \
+    rm -f "$package"
+
+RUN install -d -m 0755 /etc/agentforge
+
+COPY --chmod=0444 github-allowlist.yml /etc/agentforge/github-allowlist.yml
+COPY --chmod=0555 agentforge-gh /usr/local/bin/agentforge-gh
+COPY --chmod=0555 agentforge-gh-auth /usr/local/bin/agentforge-gh-auth
+COPY --chmod=0444 agentforge-gh-auth-lib.rb /usr/local/lib/agentforge-gh-auth.rb
+
+USER 1000:1000
+
+FROM workstation AS workstation-default
+
+FROM ubuntu@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5 AS maintainer-broker
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ruby3.2=3.2.3-1ubuntu0.24.04.9 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY maintainer-broker/ /opt/agentforge/maintainer-broker/
+RUN chown -R root:root /opt/agentforge/maintainer-broker \
+    && chmod 0555 /opt/agentforge/maintainer-broker/bin/maintainer-broker \
+    && find /opt/agentforge/maintainer-broker/lib -type f -exec chmod 0444 {} +
+
+WORKDIR /
+USER 65532:65532
+ENTRYPOINT ["/usr/bin/ruby3.2", "/opt/agentforge/maintainer-broker/bin/maintainer-broker"]
+CMD ["--self-check"]

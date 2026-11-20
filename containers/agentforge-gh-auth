@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+
+exec /usr/bin/env -i \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  HOME=/tmp \
+  LANG=C.UTF-8 \
+  GH_CONFIG_DIR=/tmp/agentforge-gh/config \
+  /usr/bin/ruby - "$@" <<'RUBY'
+require "io/console"
+require "/usr/local/lib/agentforge-gh-auth"
+
+def fail(message, status = 1)
+  warn "agentforge-gh-auth: #{message}"
+  exit status
+end
+
+def usage
+  fail("usage: agentforge-gh-auth {store|status|clear}", 2)
+end
+
+def store
+  console = IO.console
+  fail("store requires an interactive terminal") unless console&.tty?
+
+  console.print("Fine-grained GitHub PAT (input hidden): ")
+  console.flush
+  input = console.noecho { console.gets }
+  console.puts
+  token = input&.chomp
+
+  fail("expected a fine-grained PAT") unless AgentForgeGhAuth.valid_token?(token)
+
+  AgentForgeGhAuth.store_token(token)
+  token = nil
+  puts "PAT stored for this container lifetime."
+rescue AgentForgeGhAuth::StorageError
+  fail("PAT storage is unavailable, invalid, or not ephemeral.")
+end
+
+def status
+  case AgentForgeGhAuth.token_state
+  when :missing
+    puts "PAT not stored."
+  when :stored
+    puts "PAT stored in ephemeral storage (mode 0600)."
+  else
+    fail("PAT storage is invalid; clear it and store again.")
+  end
+rescue AgentForgeGhAuth::StorageError
+  fail("PAT storage is unavailable or not ephemeral.")
+end
+
+def clear
+  removed = AgentForgeGhAuth.clear_token
+  puts(removed ? "PAT cleared." : "PAT already clear.")
+rescue AgentForgeGhAuth::StorageError
+  fail("PAT storage could not be cleared.")
+end
+
+case ARGV
+when ["store"]
+  store
+when ["status"]
+  status
+when ["clear"]
+  clear
+else
+  usage
+end
+RUBY

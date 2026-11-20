@@ -191,7 +191,7 @@ bootstrap_module() {
         || fail "generated .ruby-version must not be a symbolic link."
     printf '3.2.3\n' > "$target/.ruby-version"
     printf 'Created Puppet module at %s\n' "$target"
-    printf 'Next: agentforge-puppet bundle-install %s, then validate and unit-test it.\n' "$target"
+    printf 'Next: agentforge-puppet validate %s, then agentforge-puppet unit %s.\n' "$target" "$target"
 }
 
 command="${1:-}"
@@ -223,7 +223,6 @@ case "$command" in
     unit)
         module_and_args "$@"
         cd -- "$module_root"
-        install_module_bundle
         pdk test unit "${module_args[@]}"
         ;;
     -h|--help|help)

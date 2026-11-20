@@ -1,0 +1,4 @@
+github:
+  allowed_repositories:
+    - Phil-Friderici/puppetlabs-mysql
+    - Phil-Friderici/puppetlabs-concat

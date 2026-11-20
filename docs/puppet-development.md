@@ -9,13 +9,13 @@ This guide defines the supported local workflow for Puppet module development in
 | Ruby | 3.2.3 | Exact system Ruby pin in the workstation image. New modules receive `.ruby-version` set to `3.2.3`; a conflicting module pin fails preflight. |
 | Bundler | 2.4.20 | Exact version used for module dependency installation. |
 | PDK | 4.0.1 | Exact image version. PDK-generated modules use the `pdk-default#4.0.1` template reference. |
-| Puppet | Puppet 8 recommended major; PDK 4.0.1 reported Puppet 8.22.0 during local validation | `metadata.json` requirements and the module's locked Puppet gem version define each module's supported range. No system Puppet Agent is installed by default. |
+| Puppet | Puppet 8 recommended major; PDK-managed Puppet is selected by PDK | `metadata.json` requirements and the module's locked Puppet gem version define each module's supported range. No system Puppet Agent is installed by default. |
 
 The runtime image sets `LANG=C.UTF-8` so Ruby and PDK metadata validation use UTF-8 without per-command locale overrides. This addresses [Issue #1](https://github.com/Phil-Friderici/AgentSmith/issues/1): the minimal Ubuntu image otherwise leaves Ruby's default external encoding at US-ASCII, which breaks PDK's bundled metadata/SPDX validation.
 
-PDK 4.0.1 has no declared Puppet Agent package dependency. In a local metadata-validation check, PDK reported its managed runtime as Ruby 3.2.11 and Puppet 8.22.0; these are PDK's internal execution versions, not system package pins. AgentForge's system Ruby remains 3.2.3 for Bundler and project commands. PDK validation is run through PDK; unit tests use the module's Gemfile and lockfile. This supports module work without selecting an arbitrary global Puppet Agent version. If a module requires a system `puppet` executable or acceptance target, stop and establish its exact Puppet Agent package version before adding it to the image. Install it only through the ADR-0004 BuildKit-secret image build and keep the APT preference against unpinned Agent packages.
+PDK 4.0.1 has no declared Puppet Agent package dependency. Its managed Ruby and Puppet are separate from AgentForge's system Ruby: the pinned package reported Ruby 4.0.7 and Puppet 9.1.0 during real-module validation, while an earlier synthetic check reported Ruby 3.2.11 and Puppet 8.22.0. These are PDK-managed execution versions, not workstation or system Puppet Agent pins. Record the versions reported by the installed PDK when diagnosing a module; do not assume they match the system Ruby or a prior PDK validation. If a module requires a system `puppet` executable or acceptance target, stop and establish its exact Puppet Agent package version before adding it to the image. Install it only through the ADR-0004 BuildKit-secret image build and keep the APT preference against unpinned Agent packages.
 
-Use the module's `metadata.json` Puppet requirement as the compatibility contract. Puppet 8 is the recommended baseline, and PDK 4.0.1's observed default is Puppet 8.22.0. For multi-major support, declare the intended range and test the module's Puppet gem against each supported version through its lockfile or an explicit PDK `--puppet-version=<exact-version>` argument. Do not infer support from the image's Puppet 8 repository metadata alone.
+Use the module's `metadata.json` Puppet requirement as the compatibility contract. Puppet 8 is the recommended baseline; PDK's managed Puppet version is separate and has varied between observed PDK executions. For multi-major support, declare the intended range and test the module's Puppet gem against each supported version through its lockfile or an explicit PDK `--puppet-version=<exact-version>` argument. Do not infer support from the image's Puppet 8 repository metadata alone.
 
 ## Start a session
 
@@ -41,7 +41,7 @@ This creates `/workspace/example_module`, skips interactive prompts, uses the pi
 agentforge-puppet bootstrap example_module MIT
 ```
 
-The target must not already exist. PDK may need Level 1 network access to retrieve its public module template. Bootstrap does not install dependencies; run the bundle workflow explicitly after reviewing the generated `metadata.json`, `Gemfile`, and files.
+The target must not already exist. PDK may need Level 1 network access to retrieve its public module template. Bootstrap does not install dependencies; PDK prepares its own dependencies when you run `validate` or `unit`. The separate system-Ruby bundle workflow is optional and is only needed for direct `bundle exec` use.
 
 ## Recommended fork workflow
 
@@ -62,7 +62,7 @@ agentforge-puppet toolchain /workspace/example_module
 
 The workflow requires Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, and—when present—a matching `.ruby-version`. For existing modules without `.ruby-version`, the pinned image version is used and a warning is printed.
 
-Install dependencies with the supported wrapper:
+For direct `bundle exec` workflows only, install the optional system-Ruby bundle with:
 
 ```sh
 agentforge-puppet bundle-install /workspace/example_module
@@ -70,7 +70,17 @@ agentforge-puppet bundle-install /workspace/example_module
 
 The wrapper hashes the canonical module path and stores Bundler gems and package cache under a distinct `/cache/bundler/<module-id>/` directory. Bundler's application configuration is kept under `/tmp`, not in the repository or persistent cache. The Level 1 Compose cache root should be project- and trust-scoped as described in [Cache](../cache/README.md).
 
-Commit or otherwise deliberately manage `Gemfile.lock` according to the module's contribution policy. When a lockfile exists, Bundler uses it; when absent, Bundler resolves dependencies and creates one. Only public, unauthenticated gem sources are supported by this workflow.
+Commit or otherwise deliberately manage `Gemfile.lock` according to the module's contribution policy. When a lockfile exists, Bundler uses it; when absent, Bundler resolves dependencies and creates one. `agentforge-puppet bundle-install` is an optional system-Ruby bundle for direct `bundle exec` use; it is not a prerequisite for PDK commands. It writes the module's `Gemfile.lock` using the workstation Ruby/Bundler and can replace a lockfile produced by PDK's managed runtime. Do not run it before `validate` or `unit`; PDK manages its own dependency resolution and lockfile.
+
+### PDK-managed dependency resolution
+
+PDK's `validate` and `test unit` commands prepare a separate bundle using PDK's managed Ruby/Bundler. In the installed package, PDK reports Ruby 4.0.7, Puppet 9.1.0, and a managed Bundler 2.6.9; these are intentionally separate from AgentForge's system Ruby 3.2.3 and Bundler 2.4.20. PDK owns the module lockfile for this workflow and may use its packaged dependency cache. A successful lock can list PuppetCore as the source for Puppet/Bolt without using runtime credentials when the required gems are already available in that cache.
+
+The earlier AgentForge `unit` wrapper ran `bundle-install` before `pdk test unit`. That system-Bundler install used the public-source setting and generated a Ruby 3.2/Puppet 8 lockfile. PDK then tried to resolve that lock under its Ruby 4/Puppet 9 environment; its clean child environment sets `BUNDLE_IGNORE_CONFIG=1`, so the public-source setting was not available during that re-resolution. This produced the PuppetCore authentication error. When a PDK-generated lock already existed, system Bundler could instead fail on the Bundler-version and source mismatch. The wrapper has been changed so `unit` invokes PDK without first running the standalone bundle install.
+
+In a clean, credential-free run against `puppetlabs-concat` 10.1.0 at commit `77422279fe8fc02ac05add931511a51b135bccf3`, direct `pdk test unit` and `agentforge-puppet unit` both passed 254 examples. Direct `pdk validate` and `agentforge-puppet validate` produced the same 98 RuboCop convention findings and both exited 1; dependency resolution succeeded in both. The lint findings are module results, not a wrapper discrepancy.
+
+Do not pass the standalone public-source configuration or PuppetCore credentials into PDK as a workaround. Keep PDK and standalone system-Bundler workflows separate, and investigate lockfile source/version state if a PDK command reports authentication or resolution failures.
 
 ## PDK validation and unit tests
 
@@ -92,12 +102,12 @@ Run unit tests:
 agentforge-puppet unit /workspace/example_module
 ```
 
-The unit workflow installs the module bundle into its project-specific cache before running `pdk test unit`. Pass PDK unit-test options after `--` when needed. These commands do not run Litmus, Beaker, acceptance tests, or a system Puppet Agent workflow. Acceptance testing is not currently supported; the proposed Phase 5 architecture and compatibility gates are in [Puppet Acceptance Testing Design](acceptance-testing.md).
+The unit workflow runs `pdk test unit` directly; PDK manages its own bundle and lockfile. Pass PDK unit-test options after `--` when needed. Use `bundle-install` separately only when a workflow explicitly requires the workstation Ruby bundle. These commands do not run Litmus, Beaker, acceptance tests, or a system Puppet Agent workflow. Acceptance testing is not currently supported; the proposed Phase 5 architecture and compatibility gates are in [Puppet Acceptance Testing Design](acceptance-testing.md).
 
 ## Recovery
 
 - **Ruby/Bundler/PDK mismatch:** Stop the session and rebuild the image from the pinned Dockerfile. Do not install or upgrade these tools ad hoc in the container.
-- **Dependency resolution or test failure:** Run `agentforge-puppet toolchain` first, inspect the module's Gemfile and lockfile, then rerun `bundle-install` and `unit`. Keep diagnostic output free of credential values.
+- **Dependency resolution or test failure:** Run `agentforge-puppet toolchain` first and inspect the module's Gemfile and lockfile. Run PDK commands directly through the wrapper; do not prepend `bundle-install`, since it writes a lockfile for the system Ruby/Bundler context. Keep diagnostic output free of credential values.
 - **Corrupt Bundler cache:** Stop the container, rerun `bundle-install` to let Bundler repair/repopulate the module's cache, or remove only that module's exact `/cache/bundler/<module-id>` directory after verifying the path. Do not clear the shared host cache root or another module's cache.
 - **Broken generated module:** Preserve or back up any edits, remove only the newly created module directory after resolving its exact path, then rerun `bootstrap`. Bootstrap refuses to overwrite an existing target.
 - **Protected package/build failure:** Follow [Troubleshooting](troubleshooting.md). Do not copy Puppet credentials into the workspace, cache, image build context, or runtime.

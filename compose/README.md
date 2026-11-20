@@ -27,6 +27,14 @@ The host UID/GID must be supplied explicitly. Level 0 mounts the workspace read-
 
 No acceptance-testing profile currently exists. Proposed Phase 5 uses Litmus with an isolated rootless Podman provider, but no provider service, Podman socket, Docker socket, `/dev/kvm`, target image, or acceptance credential is configured. See [Puppet Acceptance Testing Design](../docs/acceptance-testing.md) and Proposed [ADR-0006](../docs/adr/0006-acceptance-testing-platform.md).
 
+The disabled Phase 7a/7b maintainer broker uses a separate, opt-in Compose file and is not part of the workstation profiles:
+
+```sh
+docker compose -f compose/phase7a-broker.yaml --profile phase7a-broker run --rm maintainer-broker --self-check
+```
+
+This image is deny-by-default and reports no enabled operation or configured production control provider. Its profile has no network, host mounts, secrets, or workstation state; it is a foundation harness, not a maintainer-operation service. Run `scripts/test-maintainer-broker.sh` for unit and isolation checks.
+
 Copilot CLI 1.0.112 is installed in the workstation image. Both profiles provide a 512 MiB `noexec` `/tmp` tmpfs for scratch data. Level 1 additionally uses a dedicated 512 MiB executable `/copilot-cache` tmpfs: the CLI's `cli-native` shared library must be executable-mappable, while general `/tmp` remains `noexec`. The diagnostic checks the dedicated mount type, absence of `noexec`, capacity, and storage contents. Level 0 keeps its cache under non-executable `/tmp`, is offline, and does not support Copilot login. Level 1 uses `COPILOT_HOME=/copilot` on tmpfs and `COPILOT_AUTO_UPDATE=false`; the operator initiates login manually. A dedicated host path, `~/AgentForge/state/copilot` by default, persists only `settings.json` (read-only), `session-state/`, and `session-store.db`, mounted individually. The entire host state directory and Copilot home are never bind-mounted.
 
 Example:

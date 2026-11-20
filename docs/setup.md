@@ -72,7 +72,7 @@ docker compose -f compose/compose.yaml --profile level0 run --rm agent-level0
 docker compose -f compose/compose.yaml --profile level1 run --rm agent-level1
 ```
 
-The startup diagnostic checks Ubuntu, Git, Ruby, Bundler, PDK, Node.js, Copilot CLI, the selected profile's workspace/cache access, Copilot state mount boundaries, and the absence of Docker daemon access and Puppet APT credentials. Both profiles provide a 512 MiB `noexec` `/tmp` tmpfs for scratch. Level 1 additionally has a dedicated 512 MiB executable `/copilot-cache` tmpfs for Copilot CLI 1.0.112's native addon; the diagnostic verifies that mount. Level 0 has a read-only workspace, no network, `COPILOT_OFFLINE=true`, and no persistent Copilot state. Level 1 has network access; persistent writes are limited to the mounted workspace/cache and approved session-state paths. Its Copilot home/cache and `/tmp` are disposable tmpfs. It has no GitHub CLI or Puppet package credentials.
+The startup diagnostic checks Ubuntu, Git, Ruby, Bundler, PDK, Node.js, Copilot CLI, profile-specific GitHub CLI/auth-helper availability, configuration and PAT storage permissions, workspace/cache access, Copilot state mount boundaries, and the absence of Docker daemon access and Puppet APT credentials. Both profiles provide a 512 MiB `noexec` `/tmp` tmpfs for scratch. Level 1 additionally has a dedicated 512 MiB executable `/copilot-cache` tmpfs for Copilot CLI 1.0.112's native addon; the diagnostic verifies that mount. Level 0 has a read-only workspace, no network, `COPILOT_OFFLINE=true`, no persistent Copilot state, and no GitHub CLI or auth helper. Level 1 has network access and GitHub CLI 2.105.0; an operator may store a fine-grained, read-only, repository-scoped PAT using `agentforge-gh-auth`. The PAT and GitHub CLI configuration are disposable tmpfs data; no credential is configured by default.
 
 The container shell is replaceable. Repositories under the host-mounted workspace and cache data remain after the shell/container exits. Container-local `/tmp` and other writable-layer data do not persist.
 
@@ -86,7 +86,7 @@ The container shell is replaceable. Repositories under the host-mounted workspac
 | Puppet Agent | Not installed; no version is required by PDK's package metadata, and the module-specific version remains unselected |
 | Node.js | 22.23.5, downloaded from nodejs.org and SHA-256 verified for amd64/arm64 |
 | Copilot CLI | 1.0.112 from the npm lockfile; automatic updates disabled |
-| GitHub CLI | Deferred; unauthenticated by default |
+| GitHub CLI | 2.105.0 in the Level 1 image only; no authentication or AgentForge GitHub commands are configured |
 | Litmus and Beaker | `puppet_litmus` 2.8.2 is pinned by the Phase 5a fixture and runs only in the dedicated acceptance identity. The opt-in rootless Podman Phase 5a synthetic workflow passed repeatability and controlled-failure cleanup validation with a finite PIDs limit of 1024. The report records scope and remaining support limitations. |
 | Docker CLI/daemon access in the container | Not provided; no socket is mounted |
 | MCP | Disabled; no server or client configuration is loaded |

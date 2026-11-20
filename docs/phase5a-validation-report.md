@@ -2,7 +2,9 @@
 
 ## Status
 
-**The final Phase 5a validation gates passed.** Four successful serial Litmus runs each provisioned a target, applied a harmless Puppet file resource, passed the acceptance assertion, and tore down successfully. A controlled assertion failure was detected and its target was removed by the cleanup trap; run-scoped socket, storage, and staged fixture were then removed. A fresh subsequent successful run also passed. ADR-0006 remains Proposed until maintainers record the acceptance decision.
+**The final Phase 5a validation gates passed.** Four successful serial Litmus runs each provisioned a target, applied a harmless Puppet file resource, passed the acceptance assertion, and tore down successfully. A controlled assertion failure was detected and its target was removed by the cleanup trap; run-scoped socket, storage, and staged fixture were then removed. A fresh subsequent successful run also passed.
+
+ADR-0006 is Accepted. The successful completion of the Phase 5a validation program provided the evidence required for acceptance of the acceptance-testing platform strategy.
 
 Validation was performed on Ubuntu 24.04 with Podman 4.9.3, systemd 255, cgroup v2, Ruby 3.2.3, and `puppet_litmus` 2.8.2.
 

@@ -2,9 +2,13 @@
 
 ## Status and scope
 
-This document records the Phase 5 design and current validation. The Phase 5a acceptance identity, transient delegated Podman API helper, and synthetic Litmus fixture are present. A finite `--pids-limit=1024` resolved the observed zero-limit behavior; four serial minimal Puppet apply/assertion runs passed, a controlled assertion failure was detected and torn down, and a fresh subsequent run passed. The [Phase 5a validation report](phase5a-validation-report.md) records the cleanup evidence. ADR-0006 remains Proposed pending the maintainers' acceptance decision. The design preserves ADR-0004's build-only Puppet repository secret boundary and ADR-0005's ephemeral Copilot authentication.
+This document records the Phase 5 design and validation status. Phase 5a container-based acceptance testing and Phase 5b VM-based acceptance-testing compatibility validation have both completed successfully. The Phase 5a acceptance identity, transient delegated Podman API helper, and synthetic Litmus fixture are present. A finite `--pids-limit=1024` resolved the observed zero-limit behavior; four serial minimal Puppet apply/assertion runs passed, a controlled assertion failure was detected and torn down, and a fresh subsequent run passed. The [Phase 5a validation report](phase5a-validation-report.md) records the cleanup evidence.
 
-The dedicated VM specification, provisioning guide, validation checklist, diagnostics, and ADR-0006 acceptance gate are in [Acceptance Testing Validation Phase 1](acceptance-validation-phase1.md). The current Phase 5a validation does not change ADR-0006's Proposed status.
+ADR-0006 is Accepted. Phase 5a is operationally validated. Phase 5b architecture, provider selection, VM lifecycle validation, and Litmus integration validation are documented in ADR-0009 and the associated Phase 5b validation reports.
+
+The design preserves ADR-0004's build-only Puppet repository secret boundary and ADR-0005's ephemeral Copilot authentication.
+
+The dedicated VM specification, provisioning guide, validation checklist, and diagnostics are in [Acceptance Testing Validation Phase 1](acceptance-validation-phase1.md). ADR-0006 is Accepted; Phase 5a validation evidence is recorded in the [Phase 5a validation report](phase5a-validation-report.md).
 
 The assessment is qualitative, not a current market-share survey. Litmus and Beaker are test frameworks; Docker, Podman, nested KVM, and EC2 are target or provisioning technologies. A framework does not itself isolate the code or target it runs.
 
@@ -41,7 +45,7 @@ Risk and complexity labels are relative to the existing unprivileged workstation
 
 Adopt **Litmus as the primary framework** for new AgentForge acceptance workflows. For the default local target, pursue **rootless Podman in a dedicated acceptance-provider boundary**, not a Podman or Docker socket mounted into the normal workstation. Keep Beaker as a compatibility path for a concrete module that already depends on it. Use EC2 only as an explicit opt-in for tests that need cloud fidelity, a wider OS matrix, or provider behavior unavailable locally.
 
-The Podman choice is conditional on a Phase 5 compatibility spike. The spike must demonstrate that the pinned Litmus/provider combination can provision, connect to, and reliably remove rootless Podman targets without exposing the workstation's host Docker daemon, broad host mounts, Copilot state, or Puppet repository credentials. If this fails, do not silently substitute a Docker socket. Reassess an isolated EC2 provider or submit a separate security-reviewed proposal for a dedicated rootless Docker provider.
+The Phase 5a compatibility spike validated the pinned Litmus/rootless Podman combination for its synthetic target. Phase 5b separately validated the Vagrant/libvirt VM lifecycle and minimal Litmus provisioning workflow. These results do not complete Phase 5b production hardening or establish compatibility with every module, target, or workload. Do not expose a Docker or Podman socket to the normal workstation; any future provider change requires a separate security review.
 
 The acceptance provider must be separate from the normal development service. Prefer a short-lived runner/provider environment under a dedicated unprivileged identity with private Podman storage, no `sudo`, and no general host-home access. Only the staged module snapshot and required test output should cross into that environment. If the test runner must access a provider API socket, use a permission-restricted local socket confined to that disposable provider boundary; do not expose an unauthenticated API over TCP, mount the socket into the normal workstation, or expose it to Copilot sessions.
 
@@ -64,11 +68,11 @@ This design keeps routine module work fast and local while preserving a route to
 5. Litmus provisions the module and runs its acceptance suite. Beaker is used only when a named module requires its existing harness.
 6. Results are collected without secret values; targets and one-run credentials are removed even after failure or interruption. A final cleanup check reports any resource that could not be removed.
 
-The details of artifact transport, provider API, logging, and interruption recovery are Phase 5 implementation decisions gated by the compatibility spike. No service, profile, socket, image, package, or credential flow is enabled by this proposal.
+The Phase 5a and Phase 5b validation paths are separate from the normal Level 0/Level 1 workstation profiles. Phase 5b production hardening still needs controller/worker separation, resource-limit enforcement, durable audit and run journaling, and interruption recovery before production operation. Validation completion does not enable acceptance testing in the normal workstation profiles.
 
 ## Phase 5 implementation roadmap
 
-1. **Compatibility spike:** Select one representative module or synthetic fixture and a pinned Litmus version. Prove the rootless Podman provider lifecycle, systemd/service behavior, network isolation, and teardown. No Docker daemon or persistent credentials.
+1. **Compatibility spike — complete:** Phase 5a validated the rootless Podman container path; Phase 5b validated Vagrant/libvirt VM lifecycle and minimal Litmus provisioning, connectivity, teardown, and cleanup reconciliation. No Docker daemon or persistent credentials were used.
 2. **Target contract:** Choose and record the exact Puppet Agent and target OS versions from a module support requirement. Decide how the target image is built under ADR-0004 without runtime repository credentials.
 3. **Isolated execution boundary:** Specify a separately invoked acceptance profile/provider identity, minimal artifact transfer, mount/network policy, resource limits, and failure-safe cleanup.
 4. **Workflow and evidence:** Add repeatable commands, human-readable reports, a disposable fixture, and tests for denied mounts, target allowlists, cleanup, and credential absence.

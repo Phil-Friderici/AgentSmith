@@ -1,0 +1,62 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require_relative "../lib/agentforge/maintainer_broker"
+
+module AgentForge
+  module MaintainerBroker
+    class CLI
+      AUDIT_PATH = "/run/agentforge-broker-audit/events.jsonl"
+
+      def self.run(arguments)
+        case arguments
+        when ["--self-check"]
+          catalog = OperationCatalog.phase7a
+          policy = OperationPolicy.new(catalog: catalog, enabled_operations: [])
+          puts JSON.generate(
+            "broker" => "phase7a",
+            "level3_enabled" => false,
+            "policy_version" => policy.version,
+            "enabled_operations" => policy.enabled_operations,
+            "team_membership_configured" => false,
+            "approval_provider_configured" => false,
+            "approval_evidence_verifier_configured" => false,
+            "credential_issuer_configured" => false,
+            "credential_revoker_configured" => false,
+            "durable_audit_configured" => false,
+            "external_emergency_stop_configured" => false,
+            "emergency_stop_supervisor_configured" => false,
+            "effective_uid" => Process.euid,
+            "root_writable" => File.writable?("/"),
+            "git_available" => ["/usr/bin/git", "/usr/local/bin/git"].any? { |path| File.executable?(path) },
+            "github_cli_available" => ["/usr/bin/gh", "/usr/local/bin/gh"].any? { |path| File.executable?(path) },
+            "curl_available" => ["/usr/bin/curl", "/usr/local/bin/curl"].any? { |path| File.executable?(path) }
+          )
+          0
+        when ["--request-stdin"]
+          input = STDIN.read(MAX_ENVELOPE_BYTES + 1)
+          envelope = if input.bytesize <= MAX_ENVELOPE_BYTES
+                       JSON.parse(input)
+                     end
+          broker = AgentForge::MaintainerBroker.disabled_broker(
+            audit_sink: FileAuditSink.new(AUDIT_PATH)
+          )
+          puts JSON.generate(broker.execute(envelope))
+          0
+        else
+          warn "usage: maintainer-broker --self-check | --request-stdin"
+          64
+        end
+      rescue JSON::ParserError
+        broker = AgentForge::MaintainerBroker.disabled_broker(
+          audit_sink: FileAuditSink.new(AUDIT_PATH)
+        )
+        puts JSON.generate(broker.execute(nil))
+        0
+      end
+    end
+  end
+end
+
+exit AgentForge::MaintainerBroker::CLI.run(ARGV)

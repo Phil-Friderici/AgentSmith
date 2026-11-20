@@ -10,9 +10,9 @@ Phase 4 Puppet module workflows are implemented and operationally validated, inc
 
 Phase 5a local container acceptance testing is implemented and operationally validated under ADR-0006 using Litmus 2.8.2, the docker_exp provisioner, and rootless Podman 4.9.3+ds1-1ubuntu0.2.
 
-Phase 5b external VM-based acceptance testing remains future work.
+Phase 5b compatibility and integration validation for the external VM path is complete. Production hardening and operational rollout remain future work; the proposed provider, credential, isolation, cost, and cleanup strategy is recorded in [ADR-0009](adr/0009-external-vm-acceptance-testing-strategy.md).
 
-GitHub CLI integration, MCP integration, and higher permission levels remain unimplemented.
+The Phase 6a GitHub CLI foundation, read-only wrapper layer, and ephemeral PAT lifecycle are implemented and authenticated metadata retrieval has been validated for both allowlisted repositories. Issues are disabled and no PRs or releases were available in those repositories. The PAT's actual permissions and scope remain operator-verified. See the [authenticated validation report](phase6a-authenticated-validation-report.md). MCP integration and higher permission levels remain unimplemented.
 
 ## Phase 0 — Architecture baseline
 
@@ -35,15 +35,14 @@ GitHub CLI integration, MCP integration, and higher permission levels remain uni
 - MCP: disabled in the initial baseline; add only reviewed integrations for a concrete need.
 - Versions: exact pins with deliberate, compatibility-tested updates.
 - Caches: selected per-user/per-project Ruby/Bundler and PDK caches; no credentials and no writable sharing across permission levels.
-- Acceptance testing architecture is governed by ADR-0006. Phase 5a has been implemented and validated using Litmus 2.8.2, the docker_exp provisioner, and isolated rootless Podman targets. Phase 5b remains future work.
+- Acceptance testing architecture is governed by Accepted ADR-0006. Phase 5a has been implemented and validated using Litmus 2.8.2, the `docker_exp` provisioner, and isolated rootless Podman targets. Phase 5b compatibility and integration validation is complete; production hardening remains future work.
 
 **Status:** Policy choices are recorded in ADR-0002 through ADR-0005. Exact pins are recorded for Ubuntu/Git/Ruby, Bundler 2.4.20, and PDK 4.0.1 (`4.0.1.1-1noble`). PDK package metadata has no declared Puppet Agent dependency; an exact Agent version remains target-module-dependent. The BuildKit secret workflow has been implemented and operationally validated using real operator-provided Puppet repository credentials. Validation confirmed successful protected package retrieval, absence of credentials in runtime images, absence of credentials in image layers, and absence of credential leakage in build logs.
 
-ADR-0005 rejects persistent Copilot authentication and approves separately persistent session/settings state. Phase 5a acceptance testing is implemented and validated under ADR-0006. Phase 5b remains future work.
+ADR-0005 rejects persistent Copilot authentication and approves separately persistent session/settings state. Phase 5a acceptance testing is implemented and validated under ADR-0006. Phase 5b compatibility and integration validation is complete; production hardening remains future work.
 
 **Remaining roadmap items:**
 
-- Select and document compatible exact versions for GitHub CLI before Phase 6 implementation. Phase 3 targets the studied Copilot CLI 1.0.112 release and pins its Node.js runtime.
 - Select and document an exact Puppet Agent version when a concrete module workflow establishes its runtime requirement.
 - Test that Levels 0 and 1 cannot push or create pull requests using any available route.
 
@@ -69,7 +68,7 @@ ADR-0005 rejects persistent Copilot authentication and approves separately persi
 
 The implementation follows ADR-0001 through ADR-0004: one replaceable unprivileged workstation image, external bind-mounted workspace/cache, Level 0/1 capability separation, no runtime Puppet credentials or Docker socket, and a BuildKit-only PDK package secret. ADR-0005 additionally governs future Copilot authentication and session/settings state. The host initializer, diagnostic, documentation, `.gitignore`, and build-context allowlist are implementation details that reinforce those decisions.
 
-GitHub CLI, Puppet Agent, Beaker, Phase 5b VM-based acceptance testing, Level 2/3 operations, Docker daemon access, and MCP servers remain unimplemented. Copilot authentication persistence is rejected by ADR-0005, not deferred. Copilot CLI and its approved session/settings persistence are implemented in Phase 3. Phase 5a acceptance testing is implemented and validated under ADR-0006. Phase 5b remains future work.
+Puppet Agent, Beaker, the production Phase 5b VM acceptance workflow, Level 2/3 operations, Docker daemon access, and MCP servers remain unimplemented. Phase 5b compatibility and integration validation is complete; its production hardening remains future work. GitHub CLI 2.105.0, `agentforge-gh`, and `agentforge-gh-auth` are installed only in the Level 1 image; the wrapper is constrained to the exact repositories in `containers/github-allowlist.yml` and only metadata read commands. Authenticated repository views, allowlist denials, ephemeral storage, non-disclosure, and recreation cleanup have been validated; repository data limitations and the operator-verified PAT scope are recorded in the Phase 6a report. Copilot authentication persistence is rejected by ADR-0005, not deferred. Copilot CLI and its approved session/settings persistence are implemented in Phase 3. Phase 5a acceptance testing is implemented and validated under ADR-0006.
 
 ## Phase 3 — First usable Copilot workstation
 
@@ -104,9 +103,35 @@ GitHub CLI, Puppet Agent, Beaker, Phase 5b VM-based acceptance testing, Level 2/
 - Keep system Puppet Agent uninstalled until a target module establishes an exact runtime requirement; keep its APT installation unpinned by default.
 - Document public-fork/local-branch practices, dependency/cache behavior, and recovery without adding GitHub authentication or remote-write access.
 
-**Status:** Implemented. `agentforge-puppet` provides toolchain checks, PDK module bootstrap, per-module Bundler install, `pdk validate`, and `pdk test unit`. The workstation diagnostic requires Ruby 3.2.3, Bundler 2.4.20, and PDK 4.0.1. New modules default to the PDK 4.0.1 template and `.ruby-version` 3.2.3. The Bundler cache is isolated by a hash of the canonical module path; Bundler configuration remains under `/tmp`. Puppet 8 is the recommended major, with PDK 4.0.1 reporting Puppet 8.22.0 in a local metadata-validation check; module metadata/lockfiles define exact compatibility and no system Agent is installed. `docs/puppet-development.md` defines the supported workflow, local fork workflow, version policy, and recovery. Synthetic command tests and PDK metadata validation pass; no external module repository or private source was accessed. The protected PDK package build workflow was successfully validated using authorized credentials. Image-layer inspection, runtime inspection, and build-log inspection confirmed that secrets were not retained or exposed.
+**Status:** Implemented. `agentforge-puppet` provides toolchain checks, PDK module bootstrap, per-module Bundler install, `pdk validate`, and `pdk test unit`. The workstation diagnostic requires Ruby 3.2.3, Bundler 2.4.20, and PDK 4.0.1. New modules default to the PDK 4.0.1 template and `.ruby-version` 3.2.3. The Bundler cache is isolated by a hash of the canonical module path; Bundler configuration remains under `/tmp`.
 
-**Exit criteria:** Workflow command behavior and cache isolation are tested using synthetic fixtures; PDK command compatibility is checked against the installed 4.0.1 help/version. End-to-end tests against a PDK-generated module remain an operator verification because module bootstrap fetches its template from the public PDK source. The workflow does not use or persist credentials. The protected package build workflow has been operationally validated under ADR-0004.
+Puppet 8 is the recommended major, with PDK 4.0.1 reporting Puppet 8.22.0 in a local metadata-validation check; module metadata and lockfiles define exact compatibility and no system Puppet Agent is installed.
+
+`docs/puppet-development.md` defines the supported workflow, local fork workflow, version policy, and recovery.
+
+Synthetic command tests, PDK metadata validation, and the protected PDK package build workflow have passed. The protected package build workflow was validated using authorized credentials. Image-layer inspection, runtime inspection, and build-log inspection confirmed that secrets were not retained or exposed.
+
+Real-module validation was performed against `puppetlabs-mysql`. Direct PDK execution and the documented AgentForge wrapper workflow both completed successfully:
+
+- `pdk validate`
+- `pdk test unit`
+- `agentforge-puppet validate`
+- `agentforge-puppet unit`
+
+Validation confirmed equivalent behaviour between direct PDK execution and the AgentForge wrapper workflow. No functional differences were observed in dependency preparation, validator execution, runtime selection, or unit-test execution.
+
+The observed runtime difference between the workstation toolchain and the PDK-managed runtime is expected because PDK executes within its own managed Ruby, Puppet, and Bundler environment.
+
+Phase 4 is operationally validated for real-world Puppet module development workflows.
+
+**Exit criteria:**
+
+- Workflow command behavior and cache isolation are tested using synthetic fixtures.
+- PDK command compatibility is checked against the installed 4.0.1 help/version.
+- The protected package build workflow has been operationally validated under ADR-0004.
+- Real-module validation demonstrates successful direct PDK execution against a representative Puppet Forge module.
+- Real-module validation demonstrates successful execution of the documented AgentForge wrapper workflow against a representative Puppet Forge module.
+- The workflow does not use or persist credentials.
 
 ## Phase 5 — Acceptance testing platform
 
@@ -125,20 +150,46 @@ GitHub CLI, Puppet Agent, Beaker, Phase 5b VM-based acceptance testing, Level 2/
 - Cleanup after failed execution validated.
 - Repeatable execution validated.
 
-### Remaining work for Phase 5b
+### Completed in Phase 5b
 
-- Select the exact Puppet Agent and target OS versions from a concrete module's support requirements.
-- Build target images without runtime Puppet repository credentials, following ADR-0004.
-- Specify provider credentials as short-lived and run-scoped if a remote provider requires them.
-- Keep EC2 opt-in and document cost and cleanup limits.
-- Implement bounded provisioning, resource limits, explicit target allowlists, cleanup on success/failure/interruption, and human-readable run reports for VM-based targets.
-- Test that Levels 0 and 1 remain unchanged and cannot access provider sockets or cloud credentials.
-- Evaluate and select preferred VM-based providers (for example EC2, Vagrant, or Beaker-based workflows).
-- Validate supported operating systems for Phase 5b.
+- ADR-0009 architecture and security model reviewed and validated.
+- Vagrant selected as the VM acceptance-testing approach.
+- libvirt/KVM selected as the preferred backend.
+- VirtualBox retained as a fallback backend.
+- Ubuntu 24.04 validation-host candidate evaluated.
+- KVM acceleration validated.
+- QEMU 8.2.2 validated.
+- libvirt 10.0.0 validated.
+- vagrant-libvirt 0.12.2 validated.
+- VM lifecycle validated:
+  - provision
+  - boot
+  - SSH connectivity
+  - teardown
+  - cleanup
+- Litmus provisioning validated against Vagrant/libvirt.
+- Litmus inventory generation validated.
+- Litmus SSH connectivity validated.
+- Litmus teardown validated.
+- Cleanup after provisioning failure validated.
+- Inventory reconciliation and stale-entry cleanup validated.
 
-**Status:** Phase 5a is implemented and operationally validated.
+### Remaining work
+
+- Select the exact Puppet Agent version and initial operating-system target based on the target module's support matrix.
+- Establish the final dedicated validation-host operating model described by ADR-0009.
+- Implement controller/worker separation for production use.
+- Implement durable audit storage and run journaling.
+- Implement runtime, resource, and target-allowlist enforcement.
+- Implement interruption recovery and independent cleanup verification for production operation.
+- Validate at least one real module-specific acceptance-test workflow using the selected operating-system target.
+- Produce operational documentation and runbooks.
+
+**Status:** Phase 5a and Phase 5b compatibility validation are complete.
 
 Validation confirmed:
+
+Phase 5a:
 
 - Litmus 2.8.2
 - `docker_exp` provisioner
@@ -151,42 +202,166 @@ Validation confirmed:
 - Cleanup after failure
 - Repeatable execution
 
-Four successful Litmus runs completed. A controlled failure was detected and cleaned up successfully. A subsequent clean run also passed.
+Phase 5b:
 
-Phase 5a is complete.
+- Vagrant 2.4.9
+- libvirt/KVM
+- QEMU 8.2.2
+- libvirt 10.0.0
+- vagrant-libvirt 0.12.2
+- VM provisioning
+- SSH connectivity
+- VM teardown
+- Cleanup verification
+- Litmus provisioning workflow
+- Inventory generation
+- Failure cleanup and reconciliation
 
-Phase 5b remains unimplemented.
+Phase 5 acceptance testing is operationally validated across both container-based and VM-based execution paths.
 
-**Design:** [Puppet Acceptance Testing Design](acceptance-testing.md); [Validation Phase 1 guide](acceptance-validation-phase1.md); [ADR-0006](adr/0006-acceptance-testing-platform.md).
+**Design:** [Puppet Acceptance Testing Design](acceptance-testing.md); [Validation Phase 1 guide](acceptance-validation-phase1.md); [ADR-0006](adr/0006-acceptance-testing-platform.md); [ADR-0009](adr/0009-external-vm-acceptance-testing-strategy.md); [Phase 5b Compatibility Spike Protocol](phase5b-compatibility-spike-test-protocol.md); [Phase 5b Compatibility Report](phase5b-compatibility-report.md); [Phase 5b Litmus Integration Report](phase5b-litmus-integration-report.md).
 
-Phase 5a is available only through the isolated acceptance boundary and is not available to normal Level 0 or Level 1 workstation workflows by default.
+Phase 5 acceptance testing remains available only through dedicated acceptance-testing boundaries and is not available to normal Level 0 or Level 1 workstation workflows by default.
 
-**Exit criteria status:** Phase 5a complete. Phase 5b pending.
+**Exit criteria status:** Phase 5a complete. Phase 5b compatibility and integration validation complete. Remaining work is operational hardening and productionization rather than architecture validation.
 
-## Phase 6 — GitHub CLI and MCP integration
+## Phase 6a — GitHub CLI read-only foundation
 
-**Goal:** Add separately governed GitHub CLI and constrained MCP capabilities after the acceptance boundary and first usable Puppet workflows are established.
+**Goal:** Provide Level 1-only GitHub CLI access and a constrained read-only metadata workflow using ephemeral authentication state and repository allowlists.
 
-**Work:**
+**Status:** Implemented and operationally validated.
 
-- Keep GitHub CLI unauthenticated by default; add an optional read-only capability only if a reviewed workflow requires it.
-- Keep MCP disabled unless a concrete workflow justifies an audited, minimal allowlist; document all enabled tools and endpoints.
-- Test that Levels 0 and 1 cannot push or create pull requests using any available route.
+Validation confirmed:
 
-**Exit criteria:** Tool availability matches the permission profile, and default remote writes are denied.
+- GitHub CLI 2.105.0 installation and version pinning.
+- Level 0 exclusion from GitHub CLI access.
+- Level 1 ephemeral GitHub configuration using `GH_CONFIG_DIR` on tmpfs.
+- Repository allowlist enforcement.
+- Read-only `agentforge-gh` wrapper enforcement.
+- Environment sanitization and override rejection.
+- Ephemeral PAT storage using `agentforge-gh-auth`.
+- Authentication-state removal after container recreation.
+- Denial of unsupported and write operations.
 
-## Phase 7 — Level 2 and Level 3 operations
+Operational validation was completed using:
 
-**Goal:** Add explicit remote collaboration and maintainer capabilities only after lower levels are verified.
+- `Phil-Friderici/puppetlabs-mysql`
+- `Phil-Friderici/puppetlabs-concat`
 
-**Work:**
+Validated operations:
 
-- Define repository and branch allowlists, credential scope/lifetime, and push/PR confirmation.
-- Define per-operation Level 3 approvals and a separate, short-lived execution path.
-- Add audit metadata while excluding secret values and sensitive output.
-- Test revocation and denial paths.
+- `repo view`
+- `pr list`
 
-**Exit criteria:** Remote and maintainer actions are gated, auditable, target constrained, and unavailable by default.
+Repositories not present in the allowlist were denied as expected.
+
+No GitHub credentials were stored in persistent locations, logs, diagnostics, generated files, workspace storage, or container images.
+
+**Remaining work:** No Phase 6a implementation work remains. Verify fine-grained PAT permissions and repository scope before storing new credentials. Future GitHub functionality beyond read-only metadata retrieval is part of Phase 6b.
+
+**Exit criteria:** Met.
+
+Validated properties:
+
+- Level 0 has no GitHub CLI and no GitHub integration capability.
+- Level 1 uses only ephemeral GitHub configuration and authentication state.
+- Only approved read-only metadata commands are available through the AgentForge wrapper.
+- Repository allowlists are enforced.
+- Unsupported and write operations are denied.
+- Authentication state is removed through container recreation.
+- No GitHub credentials are persisted.
+
+## Phase 6b — Controlled contribution workflow
+
+**Goal:** Enable an opt-in workflow from issue context through validated local commit to a controlled draft pull request, without merge or maintainer capabilities.
+
+**Status:** Design proposed in [ADR-0008](adr/0008-controlled-contribution-workflow.md); not accepted or implemented.
+
+Phase 6b is currently paused.
+
+Repository eligibility reviews completed during ADR-0008 validation did not identify a repository that currently satisfies the required contribution controls. As a result, no contribution broker implementation, write credential workflow, branch push workflow, or draft pull-request workflow has been approved for implementation.
+
+Normal Level 1 remains read-only for GitHub metadata and has no write credential.
+
+The proposed design requires:
+
+- A separate, empty-by-default contribution allowlist with exact repositories and base branches.
+- A credential-free validation runner whose evidence is bound to the exact staged tree and resulting commit.
+- An isolated, one-shot contribution broker that alone receives a short-lived repository-scoped write credential.
+- Separate operator approvals before branch push and draft PR creation.
+- A host-side persistent audit journal containing action metadata but no credentials or full output.
+- Protected base branches, no bypass for the contribution identity, and no merge operation in the broker.
+- Repository workflow-exposure review and eligibility approval before any repository may participate in Phase 6b.
+- Verified merge denial, branch protection, credential lifecycle controls, and workflow-trigger safety for each approved repository.
+- No issue modification, workflow execution, repository administration, arbitrary GitHub CLI/API access, force-push, or branch deletion.
+
+**Current blocker:** No repository has yet passed the ADR-0008 eligibility review. Existing candidate repositories require additional workflow hardening, branch-protection controls, or contribution-safety verification before Phase 6b can proceed.
+
+**Implementation roadmap:** Phase 6b remains paused pending an eligible repository. Resume only after a repository successfully completes the ADR-0008 eligibility review, workflow-exposure review, merge-denial validation, and branch-protection validation. Once an eligible repository exists, implement audit/approval orchestration, credential-free validation and tree-bound evidence, the isolated broker, the ephemeral write-credential lifecycle, and then complete mocked, failure-path, security-boundary, and repository-specific validation before enabling contributions.
+
+## Phase 7 — Level 3 maintainer operations
+
+**Goal:** Provide an optional future path for maintainer-level operations after lower levels are verified. Phase 6b defines the constrained Level 2 contribution workflow.
+
+**Status:** ADR-0010 is Accepted. Phase 7 architecture, security review, implementation planning, provider selection, provider integration planning, and Phase 7a/7b implementation foundations are complete.
+
+Level 3 remains a future capability and is not required for the current AgentSmith operating model.
+
+AgentSmith currently targets:
+
+- Local Puppet module development
+- Validation and testing
+- Branch creation in controlled repositories
+- Fork-based contribution workflows
+- Draft pull-request creation
+
+AgentSmith does not currently target:
+
+- Pull-request merge automation
+- Release automation
+- Repository maintainer workflows
+- Organization administration
+
+No production provider is connected. All Level 3 operations remain disabled.
+
+Implementation sequencing and validation gates are defined in the [Phase 7 implementation plan](phase7-implementation-plan.md), [provider integration plan](phase7-provider-integration-plan.md), and [provider integration validation plan](phase7-provider-integration-validation-plan.md).
+
+ADR-0010 acceptance satisfies the architecture and governance gates. Any future Level 3 enablement requires separate implementation, validation, and operational approval.
+
+**Implemented Foundations:**
+
+- Broker foundation
+- Operation allowlisting
+- Approval framework
+- Audit framework
+- Revocation framework
+- Emergency-stop framework
+- Fail-closed enforcement
+- Identity and approval provider selection
+- Provider integration planning
+- Provider integration validation planning
+
+**Deferred Work:**
+
+- Production provider deployment
+- Credential issuance services
+- Durable audit infrastructure
+- External emergency-stop services
+- Provider-backed validation
+- Merge operations
+- Release operations
+- Additional maintainer operations
+
+**Exit criteria:** Remote and maintainer actions are gated, auditable, target constrained, explicitly authorized per operation, validated against real providers, and disabled by default until explicitly enabled.
+
+**Current status:**
+
+- Phase 7 implementation planning completed.
+- Phase 7 provider integration work paused.
+- Level 3 remains disabled.
+- No maintainer operations are enabled.
+
+See: [Phase 7 Pause Decision](decisions/phase7-pause-decision.md)
 
 ## Ongoing maintenance
 

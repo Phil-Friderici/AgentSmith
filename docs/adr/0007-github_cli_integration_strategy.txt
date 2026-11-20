@@ -1,0 +1,464 @@
+# ADR-0007: GitHub CLI Integration Strategy
+
+- Status: Accepted
+- Date: 2026-11-20
+- Deciders: AgentForge maintainers
+
+## Context
+
+AgentForge currently supports local Puppet module development, validation, unit testing, and container-based acceptance testing.
+
+Remote repository interaction intentionally remains out of scope.
+
+ADR-0005 established the following authentication principles:
+
+- Authentication must be ephemeral.
+- Authentication must be operator initiated.
+- Authentication must not survive workstation recreation.
+- Approved non-secret state may persist independently.
+- Credentials must not be stored in source repositories, images, caches, logs, or generated artifacts.
+
+As AgentForge matures, access to GitHub repository metadata, issues, pull requests, releases, and workflows becomes increasingly useful for development and maintenance activities.
+
+However, GitHub access introduces additional risks:
+
+- Repository modification
+- Branch creation
+- Pull request creation
+- Workflow execution
+- Secret exposure
+- Repository enumeration
+- Unintended remote actions
+
+GitHub integration must therefore be introduced incrementally and align with existing AgentForge security boundaries.
+
+## Decision
+
+GitHub CLI support will be introduced in two stages.
+
+### Phase 6a – Read-Only GitHub Access
+
+Goal:
+
+```text
+Operator
+    ↓
+AgentForge
+    ↓
+GitHub CLI
+    ↓
+Repository Metadata
+        Issues
+        Pull Requests
+        Releases
+        Workflows
+```
+
+Characteristics:
+
+- GitHub access is read-only.
+- Remote repository modification is prohibited.
+- Authentication remains optional.
+- Public repository access should work without authentication whenever possible.
+- Authentication is initiated manually by the operator when required.
+- Authentication remains ephemeral.
+- Authentication state is not persisted.
+- No GitHub credentials are stored in containers, caches, repositories, logs, or generated artifacts.
+- Level 0 remains unable to access GitHub.
+- Level 1 may access GitHub metadata when explicitly enabled.
+- Authenticated access to private repositories is disabled by default.
+- Repository access must be restricted to explicitly approved repositories when authenticated access is enabled.
+
+Permitted examples:
+
+```bash
+gh repo view
+gh issue view
+gh issue list
+gh pr view
+gh pr list
+gh release view
+gh search issues
+```
+
+Prohibited examples:
+
+```bash
+gh pr create
+gh pr merge
+gh issue create
+gh issue close
+gh workflow run
+gh secret set
+gh api
+gh repo fork
+```
+
+The objective is to provide development context without introducing repository modification capability.
+
+### Phase 6b – Controlled Contribution Workflow
+
+Goal:
+
+```text
+Operator Approval
+        ↓
+AgentForge
+        ↓
+GitHub CLI
+        ↓
+Branch
+        ↓
+Commit
+        ↓
+Pull Request
+```
+
+Characteristics:
+
+- Repository modification remains disabled by default.
+- Contribution actions require explicit invocation.
+- Authentication remains ephemeral.
+- Pull request creation requires operator approval.
+- Repository allowlists restrict permitted targets.
+- Branch allowlists restrict permitted targets.
+- Audit records must be preserved.
+- Pull requests are created only after local validation succeeds.
+- Automated merge operations remain prohibited.
+
+Candidate operations:
+
+```bash
+gh pr create
+gh pr view
+gh pr status
+```
+
+The objective is to support controlled contribution workflows without enabling unrestricted remote actions.
+
+## Credential Principle
+
+Repository permissions are the primary security boundary.
+
+AgentForge wrappers provide workflow control, target validation, auditability, and user guidance, but are not relied upon to enforce authorization.
+
+Any authenticated Phase 6a workflow must use credentials whose permissions are already restricted to read-only repository metadata access.
+
+Wrapper restrictions alone are not considered a security control.
+
+## Authentication Model
+
+Selected model:
+
+```text
+Manual login
+↓
+Ephemeral authentication
+↓
+Explicit operation
+↓
+Authentication removed with workstation recreation
+```
+
+Characteristics:
+
+- Operator initiated.
+- No committed credentials.
+- No image-embedded credentials.
+- No BuildKit credential usage.
+- No automatic login.
+- No automatic credential persistence.
+
+GitHub CLI authentication data must be stored only within an ephemeral filesystem location.
+
+The default GitHub CLI configuration directory must not be persisted.
+
+Container recreation must require a new GitHub login.
+
+Copilot authentication state and GitHub CLI authentication state must remain separate and must not be shared.
+
+GitHub CLI integration must not automatically import:
+
+- host Git credentials
+- credential helpers
+- access tokens
+- SSH identities
+- GitHub Desktop authentication state
+
+### Credential Types
+
+#### Public Repositories
+
+Preferred model:
+
+```text
+Unauthenticated access
+```
+
+No credentials are required.
+
+#### Private Repositories
+
+Authenticated access is opt-in.
+
+Accepted credential type for authenticated Phase 6a access:
+
+- Fine-grained GitHub Personal Access Tokens restricted to read-only repository metadata access on explicitly approved repositories.
+
+Future consideration:
+
+- GitHub App installation tokens with equivalent read-only restrictions.
+
+The authenticated Phase 6a baseline is a fine-grained read-only Personal Access Token.
+
+Rejected:
+
+- Classic Personal Access Tokens
+- Repository write credentials
+- Workflow execution credentials
+- Secrets-management credentials
+- Broad-scope repository credentials
+
+Authenticated credentials must not permit:
+
+- Pull request creation
+- Pull request merging
+- Issue creation
+- Issue modification
+- Repository content modification
+- Repository settings modification
+- Workflow execution
+- Secret management
+
+### Credential Lifetime
+
+AgentForge guarantees removal of local authentication state through workstation recreation.
+
+AgentForge does not guarantee revocation of remote GitHub credentials.
+
+Credential expiration, revocation, rotation, and lifecycle management remain operator responsibilities.
+
+Authentication-state cleanup and credential revocation are treated as separate concerns.
+
+## Implementation Constraints
+
+Phase 6a security controls are enforced through AgentForge wrapper commands.
+
+Direct GitHub CLI usage remains available to the operator but is not considered part of the validated AgentForge security boundary.
+
+All supported GitHub functionality must be exposed through reviewed AgentForge wrapper commands.
+
+Repository allowlists must be stored in version-controlled AgentForge configuration.
+
+Example:
+
+```yaml
+github:
+  allowed_repositories:
+    - Phil-Friderici/AgentSmith
+    - puppetlabs/puppetlabs-mysql
+    - puppetlabs/puppetlabs-concat
+```
+
+Repository allowlists are mandatory.
+
+Authenticated GitHub access is permitted only for repositories explicitly listed in the allowlist.
+
+Repositories not present in the allowlist are denied by default.
+
+Authentication state must reside only within an ephemeral filesystem location.
+
+GitHub CLI configuration must not persist across workstation recreation.
+
+Authenticated access to private repositories outside the approved allowlist is prohibited.
+
+Phase 6a controls govern AgentForge-managed workflows and are not intended to provide host-level enforcement against arbitrary operator actions.
+
+### GitHub Environment Controls
+
+AgentForge-managed GitHub workflows must reject or sanitize:
+
+- GH_TOKEN
+- GITHUB_TOKEN
+- GH_ENTERPRISE_TOKEN
+- GITHUB_ENTERPRISE_TOKEN
+- GH_HOST
+- GH_REPO
+
+AgentForge wrappers must provide repository selection explicitly from the approved allowlist rather than inheriting user-supplied GitHub environment overrides.
+
+## Validation Strategy
+
+### Phase 6a Validation
+
+Required before acceptance:
+
+- GitHub CLI installation succeeds.
+- Read-only commands execute successfully.
+- Repository metadata can be retrieved.
+- Authentication is optional.
+- Authentication state remains ephemeral.
+- No credentials are written to persistent workspace storage.
+- No repository modification is possible through documented workflows.
+- No forks can be created, modified, or synchronized through AgentForge workflows.
+- Raw GitHub API access through `gh api` is unavailable through AgentForge workflows.
+- Container recreation requires reauthentication.
+- Host Git credentials and SSH identities remain inaccessible.
+- Repository allowlists are enforced when authenticated access is enabled.
+- Private repositories outside the allowlist are inaccessible through AgentForge workflows.
+
+### Phase 6b Validation
+
+Required before acceptance:
+
+- Explicit approval is required before any remote modification.
+- Pull-request creation succeeds only through approved workflows.
+- Repository restrictions are enforced.
+- Branch restrictions are enforced.
+- Authentication remains ephemeral.
+- Audit information is generated.
+- Revocation and denial paths are tested.
+
+## Alternatives Considered
+
+### Persistent GitHub Authentication
+
+Rejected.
+
+Reason:
+
+- Conflicts with ADR-0005.
+- Expands credential lifetime.
+- Increases workstation compromise risk.
+
+### Fine-Grained Personal Access Token Persistence
+
+Rejected.
+
+Reason:
+
+- Violates the ephemeral-authentication model.
+- Adds credential-management overhead.
+- Increases accidental disclosure risk.
+
+### GitHub CLI Disabled
+
+Rejected.
+
+Reason:
+
+- Prevents efficient issue, pull-request, and repository context retrieval.
+- Reduces usefulness for development workflows.
+
+### Full Read/Write Access from Initial Implementation
+
+Rejected.
+
+Reason:
+
+- Excessive privilege.
+- Increases risk of unintended remote actions.
+- Incompatible with incremental trust expansion.
+
+### Wrapper-Only Authorization
+
+Rejected.
+
+Reason:
+
+- Wrapper controls can be bypassed through direct CLI usage.
+- Security must be enforced primarily by credential permissions.
+- Wrappers are workflow controls, not authorization boundaries.
+
+## Consequences
+
+### Positive
+
+- Enables repository context retrieval.
+- Improves issue-driven development workflows.
+- Supports future contribution workflows.
+- Preserves existing authentication boundaries.
+- Maintains least-privilege principles.
+- Establishes a clear permission model before introducing repository modification.
+
+### Negative
+
+- Additional operational complexity.
+- Authentication workflows require ongoing validation.
+- Contribution workflows require explicit governance.
+- Repository allowlists, audit controls, and approval gates must be maintained.
+- Read-only credentials require additional credential-management processes.
+
+## Open Questions
+
+### Phase 6a
+
+- Which GitHub CLI version should be pinned?
+- Which repository metadata operations should be exposed through AgentForge wrappers?
+- Should pull-request diff viewing be included in the initial read-only workflow?
+- Should workflow and workflow-run inspection be included in the initial read-only workflow?
+
+### Phase 6b
+
+- Which repositories may be modified?
+- Which branches may be targeted?
+- What operator approval mechanism should be enforced?
+- What audit information should be retained?
+- Should GitHub App credentials or fine-grained PATs be preferred for contribution workflows?
+
+## Security and Operations
+
+GitHub integration must:
+
+- preserve ADR-0004 boundaries
+- preserve ADR-0005 boundaries
+- preserve ADR-0006 boundaries
+- keep authentication ephemeral
+- require operator-controlled login
+- avoid credential persistence
+- avoid automatic repository modification
+- avoid automatic pull-request creation
+- avoid unattended remote actions
+- prohibit raw GitHub API access during Phase 6a AgentForge workflows
+- prohibit fork creation, modification, and synchronization during Phase 6a AgentForge workflows
+- enforce approved repository boundaries when authenticated access is enabled
+- treat credential permissions as the primary authorization control
+
+Remote contribution workflows must:
+
+- require explicit operator intent
+- operate only on approved repositories
+- operate only on approved branches
+- remain auditable
+- remain revocable
+- default to denial
+
+## References
+
+- ADR-0004: PDK Installation Strategy
+- ADR-0005: Copilot Authentication and State Management
+- ADR-0006: Acceptance Testing Platform
+- https://cli.github.com/
+
+## Validation Status
+
+Phase 6a was operationally validated on 2026-11-20.
+
+Validation confirmed:
+
+- GitHub CLI operation
+- Ephemeral authentication state
+- Repository allowlist enforcement
+- Read-only metadata retrieval
+- Wrapper command enforcement
+- Environment sanitization
+- Cleanup after container recreation
+
+Validated repositories:
+
+- Phil-Friderici/puppetlabs-mysql
+- Phil-Friderici/puppetlabs-concat
+
+Phase 6a is considered implemented and validated.
+
+Phase 6b remains future work.

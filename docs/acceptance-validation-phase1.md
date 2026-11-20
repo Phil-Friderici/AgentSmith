@@ -2,9 +2,9 @@
 
 ## Status and purpose
 
-This document prepares the dedicated environment for the Litmus/rootless Podman compatibility validation required by Proposed [ADR-0006](adr/0006-acceptance-testing-platform.md). The earlier `unshare -Ur true` failure (`Operation not permitted`) describes the previous host only; it is not evidence that Litmus and Podman are incompatible.
+This document records the dedicated-environment requirements for the Litmus/rootless Podman compatibility validation specified by Accepted [ADR-0006](adr/0006-acceptance-testing-platform.md). The earlier `unshare -Ur true` failure (`Operation not permitted`) describes the previous host only; it is not evidence that Litmus and Podman are incompatible.
 
-This phase provisions and validates a disposable VM and runs a bounded compatibility fixture. It does not enable acceptance testing in the normal AgentForge workstation, install an acceptance provider there, or change ADR-0004, ADR-0005, or the Proposed status of ADR-0006.
+This phase provisions and validates a disposable VM and runs a bounded compatibility fixture. It does not enable acceptance testing in the normal AgentForge workstation, install an acceptance provider there, or change ADR-0004, ADR-0005, or the accepted decision in ADR-0006.
 
 ## Environment specification
 
@@ -221,7 +221,9 @@ Never include secrets or authentication output in diagnostics. Redact environmen
 
 ## ADR-0006 acceptance gate
 
-ADR-0006 may move from Proposed to Accepted only after the validation record demonstrates all of the following:
+ADR-0006 is Accepted.
+
+The validation record demonstrated all of the following:
 
 - Exact Ubuntu, kernel, Podman, Ruby, Bundler, Litmus dependency-lock, target-image, and Puppet Agent versions are recorded.
 - Rootless namespace and Podman checks pass without `sudo`, Docker Engine, Docker socket access, or privileged mode.

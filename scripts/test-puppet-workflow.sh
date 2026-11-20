@@ -72,6 +72,8 @@ printf 'source "https://rubygems.org"\n' > "$workspace/second_module/Gemfile"
 printf '3.2.3\n' > "$workspace/second_module/.ruby-version"
 bash "$workflow" bundle-install "$workspace/second_module" >/dev/null
 
+[[ "$(grep -c '^bundle|' "$trace")" == "2" ]]
+
 cache_a="$(grep '^bundle|' "$trace" | head -n 1 | cut -d '|' -f2)"
 cache_b="$(grep '^bundle|' "$trace" | tail -n 1 | cut -d '|' -f2)"
 [[ "$cache_a" != "$cache_b" ]]

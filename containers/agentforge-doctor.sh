@@ -110,6 +110,38 @@ has_minimum_tmpfs_capacity() {
         | awk -v minimum="$minimum_kib" 'NR == 2 { if ($2 >= minimum) adequate = 1 } END { exit !adequate }'
 }
 
+check_github_credentials_absent() {
+    if [[ -n "${GH_TOKEN:-}" \
+        || -n "${GITHUB_TOKEN:-}" \
+        || -n "${GH_ENTERPRISE_TOKEN:-}" \
+        || -n "${GITHUB_ENTERPRISE_TOKEN:-}" ]]; then
+        report "FAIL" "GitHub credentials" "token environment variables must not be inherited"
+    else
+        report "PASS" "GitHub credentials" "no token environment variables present"
+    fi
+}
+
+check_github_pat_storage() {
+    local token_path="/tmp/agentforge-gh/pat"
+    local token_owner
+    local token_mode
+
+    if [[ ! -e "$token_path" && ! -L "$token_path" ]]; then
+        report "INFO" "GitHub PAT storage" "no PAT stored"
+        return
+    fi
+
+    token_owner="$(stat -c '%u' -- "$token_path" 2>/dev/null || true)"
+    token_mode="$(stat -c '%a' -- "$token_path" 2>/dev/null || true)"
+    if [[ -f "$token_path" && ! -L "$token_path" && -s "$token_path" \
+        && "$token_owner" == "$EUID" && "$token_mode" == "600" ]] \
+        && is_tmpfs_mount /tmp; then
+        report "PASS" "GitHub PAT storage" "present in ephemeral tmpfs with mode 0600"
+    else
+        report "FAIL" "GitHub PAT storage" "PAT file must be regular, owner-only, and ephemeral"
+    fi
+}
+
 printf '%s\n' "AgentForge workstation diagnostic"
 printf 'Permission profile: %s\n' "$level"
 printf '%s\n' "Protected paths are checked for authentication artifacts; matched contents are never displayed."
@@ -142,7 +174,91 @@ if [[ "$(pdk --version 2>/dev/null || true)" == "4.0.1" ]]; then
 else
     report "FAIL" "PDK" "expected version 4.0.1"
 fi
-check_tool "GitHub CLI" gh "Phase 5" gh --version
+check_github_credentials_absent
+if [[ "$level" == "0" ]]; then
+    if command -v gh >/dev/null 2>&1; then
+        report "FAIL" "GitHub CLI" "must be unavailable in the Level 0 image"
+    else
+        report "PASS" "GitHub CLI" "unavailable in the Level 0 image"
+    fi
+    if [[ -e /usr/local/bin/agentforge-gh || -L /usr/local/bin/agentforge-gh ]]; then
+        report "FAIL" "GitHub wrapper" "must be unavailable in the Level 0 image"
+    else
+        report "PASS" "GitHub wrapper" "unavailable in the Level 0 image"
+    fi
+    if [[ -e /usr/local/bin/agentforge-gh-auth || -L /usr/local/bin/agentforge-gh-auth \
+        || -e /usr/local/lib/agentforge-gh-auth.rb || -L /usr/local/lib/agentforge-gh-auth.rb ]]; then
+        report "FAIL" "GitHub auth helper" "must be unavailable in the Level 0 image"
+    else
+        report "PASS" "GitHub auth helper" "unavailable in the Level 0 image"
+    fi
+    if [[ -z "${GH_CONFIG_DIR:-}" && ! -e /tmp/agentforge-gh && ! -L /tmp/agentforge-gh ]]; then
+        report "PASS" "GitHub configuration" "absent in the Level 0 profile"
+    else
+        report "FAIL" "GitHub configuration" "must be absent in the Level 0 profile"
+    fi
+    if [[ ! -e /tmp/agentforge-gh/pat && ! -L /tmp/agentforge-gh/pat ]]; then
+        report "PASS" "GitHub PAT storage" "absent in the Level 0 profile"
+    else
+        report "FAIL" "GitHub PAT storage" "must be absent in the Level 0 profile"
+    fi
+elif [[ "$level" == "1" ]]; then
+    gh_version_output="$(gh --version 2>/dev/null || true)"
+    gh_version="${gh_version_output%%$'\n'*}"
+    if [[ "$gh_version" == "gh version 2.105.0"* ]]; then
+        report "PASS" "GitHub CLI" "2.105.0"
+    else
+        report "FAIL" "GitHub CLI" "expected version 2.105.0"
+    fi
+    if [[ -x /usr/local/bin/agentforge-gh && ! -L /usr/local/bin/agentforge-gh ]]; then
+        report "PASS" "GitHub wrapper" "agentforge-gh is installed"
+    else
+        report "FAIL" "GitHub wrapper" "expected executable /usr/local/bin/agentforge-gh"
+    fi
+    if [[ -x /usr/local/bin/agentforge-gh-auth && ! -L /usr/local/bin/agentforge-gh-auth \
+        && -f /usr/local/lib/agentforge-gh-auth.rb && ! -L /usr/local/lib/agentforge-gh-auth.rb ]]; then
+        report "PASS" "GitHub auth helper" "PAT lifecycle commands are installed"
+    else
+        report "FAIL" "GitHub auth helper" "expected installed agentforge-gh-auth runtime"
+    fi
+
+    if [[ "${GH_CONFIG_DIR:-}" == "/tmp/agentforge-gh/config" ]] \
+        && [[ -d /tmp/agentforge-gh && ! -L /tmp/agentforge-gh ]] \
+        && [[ -d "$GH_CONFIG_DIR" && ! -L "$GH_CONFIG_DIR" ]] \
+        && is_tmpfs_mount /tmp; then
+        report "PASS" "GitHub config location" "$GH_CONFIG_DIR on ephemeral tmpfs"
+    else
+        report "FAIL" "GitHub config location" "expected GH_CONFIG_DIR under /tmp tmpfs"
+    fi
+
+    github_config_permissions_ok=true
+    for path in /tmp/agentforge-gh "${GH_CONFIG_DIR:-}"; do
+        owner="$(stat -c '%u' -- "$path" 2>/dev/null || true)"
+        mode="$(stat -c '%a' -- "$path" 2>/dev/null || true)"
+        [[ "$owner" == "$EUID" && "$mode" == "700" ]] || github_config_permissions_ok=false
+    done
+    if [[ "$github_config_permissions_ok" == true ]]; then
+        report "PASS" "GitHub config permissions" "runtime directories are owner-only"
+    else
+        report "FAIL" "GitHub config permissions" "runtime directories must be owned by the workstation user with mode 0700"
+    fi
+
+    if [[ -d /tmp/agentforge-gh/config && ! -L /tmp/agentforge-gh/config ]] \
+        && [[ -z "$(find /tmp/agentforge-gh/config -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+        report "PASS" "GitHub auth state" "no authentication state present at startup"
+    else
+        report "FAIL" "GitHub auth state" "configuration directory must be empty at startup"
+    fi
+
+    if [[ -f /etc/agentforge/github-allowlist.yml \
+        && ! -L /etc/agentforge/github-allowlist.yml \
+        && "$(stat -c '%u:%a' /etc/agentforge/github-allowlist.yml 2>/dev/null || true)" == "0:444" ]]; then
+        report "PASS" "GitHub allowlist" "present and read-only"
+    else
+        report "FAIL" "GitHub allowlist" "expected root-owned read-only configuration"
+    fi
+    check_github_pat_storage
+fi
 check_tool "Docker CLI" docker "a separately approved extension" docker --version
 check_tool "Puppet Agent" puppet "Phase 4 after its version is approved" puppet --version
 check_ruby_gem "litmus" "Phase 6"

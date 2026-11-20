@@ -26,7 +26,7 @@ These are logical groups, not a commitment to a specific MCP server or product.
 | Local development | Edit workspace files; run approved validation and test commands. | Level 1 |
 | GitHub read | Read repository metadata, issues, pull requests, and permitted code context. | Level 0, if configured |
 | GitHub collaboration | Push an authorized branch; create or update a pull request. | Level 2 |
-| Maintainer | Merge, release, change repository settings, or administer access. | Level 3, per operation |
+| Maintainer | Merge and only those release operations explicitly enabled by an accepted ADR. Repository settings and access administration are excluded by ADR-0010. | Level 3, per operation |
 
 For local development, prefer bounded tools or the workstation's normal CLI over a broad remote execution MCP server. An MCP tool that runs arbitrary commands is effectively shell access and must be treated as such in the permission model.
 

@@ -353,7 +353,7 @@ Validation included:
 
 Phase 5a is considered implemented and validated.
 
-Phase 5b remains unimplemented and subject to future validation.
+Phase 5b provider and Litmus integration validation has completed; see [ADR-0009: External VM Acceptance Testing Strategy](0009-external-vm-acceptance-testing-strategy.md) for the recorded evidence. Any production acceptance workflow remains subject to the controls and eligibility requirements in that ADR.
 
 ## Security and Operations
 

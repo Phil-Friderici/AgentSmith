@@ -23,11 +23,11 @@ Level 0 is read-only by design. Use Level 1 only when local writes and network a
 
 The image runs `agentforge-doctor` before starting the shell. Required Phase 2 failures include a non-Ubuntu-24.04 image, missing Git/Ruby, root execution, an inaccessible workspace, a writable Level 0 workspace, a non-writable Level 1 workspace/cache, or an unexpected `/var/run/docker.sock`.
 
-Run `/usr/local/bin/agentforge-doctor` inside the container to repeat the report. It scans known persistent/workspace/cache paths for authentication artifacts but never prints matching content. Git, Ruby, Bundler, PDK, Node.js, and Copilot CLI are required.
+Run `/usr/local/bin/agentforge-doctor` inside the container to repeat the report. It scans known persistent/workspace/cache paths for authentication artifacts but never prints matching content. Git, Ruby, Bundler, PDK, Node.js, and Copilot CLI are required in both profiles; GitHub CLI 2.105.0 is required only in Level 1.
 
 ## Network or GitHub access is unavailable
 
-Level 0 has `network_mode: none` and `COPILOT_OFFLINE=true`; this is intentional. Level 1 is attached to the Compose network, but the diagnostic does not probe external endpoints. GitHub CLI authentication is not configured. Copilot login is initiated manually inside Level 1; authentication lives only under the ephemeral `/copilot` tmpfs home.
+Level 0 has `network_mode: none`, `COPILOT_OFFLINE=true`, and no GitHub CLI; this is intentional. Level 1 is attached to the Compose network, but the startup diagnostic does not probe external endpoints. GitHub CLI 2.105.0, `agentforge-gh`, and `agentforge-gh-auth` are installed in Level 1; the wrapper uses the exact repository allowlist and permits only the documented metadata commands. Authenticated requests require an operator-provided fine-grained, read-only, repository-scoped PAT. In the interactive Level 1 terminal, use `agentforge-gh-auth store` to enter it without echo, `status` to check storage without displaying the value, or `clear` to remove it. The PAT is stored only at `/tmp/agentforge-gh/pat` on tmpfs and disappears after container recreation. AgentForge cannot validate the PAT's actual permissions or repository scope. Do not pass a token in command arguments or environment variables. Copilot login is initiated manually inside Level 1; its authentication lives only under the ephemeral `/copilot` tmpfs home.
 
 If the browser reports `127.0.0.1` refusing the Copilot login callback, the host browser cannot reach the callback listener inside the container. Retry with `copilot login --device-code`, which does not use a loopback callback. Do not paste the device code into chat or logs.
 
@@ -45,13 +45,15 @@ With `HostConfig.PidsLimit=0`, the tested rootless runtime produced `pids.max=1`
 
 ## A requested development tool is missing
 
-The image includes Git, Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, Node.js 22.23.5, and Copilot CLI 1.0.112. GitHub CLI, system Puppet Agent, Litmus, and Beaker remain deferred. If a pinned tool is missing or mismatched, rebuild from the current `containers/Dockerfile`; do not install alternate toolchain versions into a running container.
+The images include Git, Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, Node.js 22.23.5, and Copilot CLI 1.0.112; the Level 1 image additionally includes GitHub CLI 2.105.0. System Puppet Agent, Litmus, and Beaker remain deferred. If a pinned tool is missing or mismatched, rebuild from the current `containers/Dockerfile`; do not install alternate toolchain versions into a running container.
 
 ## Puppet module dependency or validation failure
 
-Run `agentforge-puppet toolchain /workspace/<module>` and confirm the module's `.ruby-version`, Gemfile, lockfile, and `metadata.json` Puppet requirements. Use `agentforge-puppet bundle-install` to install dependencies into the cache isolated for that module, then rerun `validate` or `unit`. PDK validation does not auto-correct by default. A module that requires another Ruby or a system Puppet Agent needs a reviewed version decision and image update; do not bypass the preflight or install an unpinned package.
+Run `agentforge-puppet toolchain /workspace/<module>` and confirm the module's `.ruby-version`, Gemfile, lockfile, and `metadata.json` Puppet requirements. Run `validate` and `unit` directly through the AgentForge wrappers; PDK manages its own bundle. Use `bundle-install` only for an explicitly required system-Ruby bundle, not as a prerequisite for PDK. PDK validation does not auto-correct by default. A module that requires another Ruby or a system Puppet Agent needs a reviewed version decision and image update; do not bypass the preflight or install an unpinned package.
 
 Bundler configuration is under ephemeral `/tmp`, and module caches are under `/cache/bundler/<module-id>`. If a cache is corrupt, stop the container and remove only that module's exact cache directory, then rerun `bundle-install`. The workspace Gemfile and lockfile are authoritative; never move credentials into Bundler configuration to work around an inaccessible private source.
+
+If PDK requests PuppetCore authentication after a standalone `bundle-install`, inspect `Gemfile.lock` before retrying. PDK uses its managed Ruby/Bundler, while standalone Bundler writes a lock for the workstation runtime; PDK may need to re-resolve that lock with its own source selection. The AgentForge `unit` wrapper now invokes PDK directly and avoids this mismatch. Do not provide PuppetCore credentials to the runtime or change module sources as an unreviewed workaround. See [Puppet Module Development](puppet-development.md#pdk-managed-dependency-resolution).
 
 ## Copilot CLI reports a missing native addon or shared-object mapping error
 
@@ -71,7 +73,7 @@ The dedicated Level 1 Copilot cache and both profiles' `/tmp` tmpfs each have a 
 - Check that the host permits outbound package access. The protected-package build runs on the host BuildKit builder; the Level 0 runtime's no-network policy is unrelated.
 - If installation fails, review the error only after confirming it contains no credential values or authenticated URLs. Do not enable shell tracing, weaken file permissions, or expose the secret to the interactive user.
 - The pinned PDK Debian package has no declared Puppet Agent dependency. Puppet Agent remains deferred until a module workflow establishes its exact version.
-- PDK 4.0.1 package access and secret-leak checks have not been exercised with an actual credential in this environment.
+- The protected PDK BuildKit flow was previously validated with authorized credentials, including image-layer, runtime-image, and build-log checks. It has not been rerun in the current environment because no external credential source is available.
 
 ## Runtime diagnostic reports a Puppet credential
 

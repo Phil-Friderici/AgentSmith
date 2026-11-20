@@ -1,0 +1,128 @@
+#!/bin/sh
+set -eu
+
+exec /usr/bin/env -i \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  HOME=/tmp \
+  LANG=C.UTF-8 \
+  GH_CONFIG_DIR=/tmp/agentforge-gh/config \
+  GH_PROMPT_DISABLED=1 \
+  GH_PAGER=cat \
+  GH_NO_UPDATE_NOTIFIER=1 \
+  GIT_PAGER=cat \
+  PAGER=cat \
+  GIT_TERMINAL_PROMPT=0 \
+  /usr/bin/ruby - "$@" <<'RUBY'
+require "yaml"
+require "/usr/local/lib/agentforge-gh-auth"
+
+ALLOWLIST_PATH = "/etc/agentforge/github-allowlist.yml"
+GH_BINARY = "/usr/bin/gh"
+GH_CONFIG_DIR = AgentForgeGhAuth::GH_CONFIG_DIR
+
+OWNER_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9-]{0,38}\z/
+REPOSITORY_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/
+NUMBER_PATTERN = /\A[1-9][0-9]*\z/
+TAG_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9._+\/-]*\z/
+
+def deny(message, status = 2)
+  warn "agentforge-gh: #{message}"
+  exit status
+end
+
+def valid_repository?(value)
+  return false unless value.is_a?(String)
+
+  owner, repository = value.split("/", -1)
+  value.count("/") == 1 \
+    && OWNER_PATTERN.match?(owner) \
+    && REPOSITORY_PATTERN.match?(repository)
+end
+
+def valid_tag?(value)
+  return false unless value.is_a?(String) && TAG_PATTERN.match?(value)
+
+  !value.include?("..") \
+    && !value.include?("//") \
+    && !value.include?("@{") \
+    && !value.end_with?("/", ".") \
+    && value.split("/").none? { |part| part.start_with?(".") || part.end_with?(".lock") }
+end
+
+def read_allowlist
+  configuration = YAML.safe_load_file(
+    ALLOWLIST_PATH,
+    permitted_classes: [],
+    permitted_symbols: [],
+    aliases: false
+  )
+
+  return nil unless configuration.is_a?(Hash) && configuration.keys == ["github"]
+
+  github = configuration["github"]
+  return nil unless github.is_a?(Hash) && github.keys == ["allowed_repositories"]
+
+  repositories = github["allowed_repositories"]
+  return nil unless repositories.is_a?(Array)
+  return nil unless repositories.all? { |repository| valid_repository?(repository) }
+  return nil unless repositories.uniq == repositories
+
+  repositories
+rescue Errno::EACCES, Errno::ENOENT, Psych::Exception, TypeError
+  nil
+end
+
+def allowed_arguments(arguments)
+  command = arguments[0, 2]
+
+  case command
+  when ["repo", "view"]
+    return nil unless arguments.length == 3
+
+    ["repo", "view", arguments[2]]
+  when ["issue", "list"], ["pr", "list"]
+    return nil unless arguments.length == 3
+
+    [arguments[0], "list", "--repo", arguments[2]]
+  when ["issue", "view"], ["pr", "view"]
+    return nil unless arguments.length == 4 && NUMBER_PATTERN.match?(arguments[3])
+
+    [arguments[0], "view", arguments[3], "--repo", arguments[2]]
+  when ["release", "view"]
+    return nil unless (arguments.length == 3 || arguments.length == 4)
+    return nil if arguments.length == 4 && !valid_tag?(arguments[3])
+
+    gh_arguments = ["release", "view"]
+    gh_arguments << arguments[3] if arguments.length == 4
+    gh_arguments.concat(["--repo", arguments[2]])
+  end
+end
+
+gh_arguments = allowed_arguments(ARGV)
+deny("unsupported command or arguments") unless gh_arguments
+
+repository = case gh_arguments[0]
+             when "repo"
+               gh_arguments[2]
+             else
+               gh_arguments[gh_arguments.index("--repo") + 1]
+             end
+
+deny("invalid repository") unless valid_repository?(repository)
+
+allowlist = read_allowlist
+deny("repository policy unavailable", 3) unless allowlist
+deny("repository is not allowlisted", 4) unless allowlist.include?(repository)
+deny("unsupported saved GitHub authentication state", 5) \
+  if File.exist?(File.join(GH_CONFIG_DIR, "hosts.yml")) \
+    || File.symlink?(File.join(GH_CONFIG_DIR, "hosts.yml"))
+deny("GitHub CLI unavailable", 5) unless File.executable?(GH_BINARY)
+
+begin
+  token = AgentForgeGhAuth.read_token
+rescue AgentForgeGhAuth::StorageError
+  deny("PAT storage is invalid", 5)
+end
+ENV["GH_TOKEN"] = token if token
+
+exec GH_BINARY, *gh_arguments

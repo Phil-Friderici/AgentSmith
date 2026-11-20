@@ -63,4 +63,12 @@ What permissions, credentials, persistence, monitoring, or recovery implications
 
 [ADR-0004](0004-pdk-installation-strategy.md) requires BuildKit-secret PDK installation and credential-free runtime images. [ADR-0005](0005_copilot_authentication_and_state_management.md) rejects persistent Copilot authentication while allowing reviewed session history and settings to persist separately.
 
-[Proposed ADR-0006](0006-acceptance-testing-platform.md) recommends Litmus and an isolated rootless Podman target provider for Phase 5. It is not accepted and does not enable acceptance testing or supersede ADR-0002 until accepted.
+[ADR-0006](0006-acceptance-testing-platform.md) selects Litmus and an isolated rootless Podman target provider for Phase 5; Phase 5a is operationally validated.
+
+[ADR-0007](0007-github_cli_integration_strategy.txt) defines the GitHub CLI access strategy. Phase 6a read-only access and ephemeral authentication are implemented and operationally validated.
+
+[Proposed ADR-0008](0008-controlled-contribution-workflow.md) specifies an isolated, opt-in Phase 6b workflow for validated branch pushes and draft pull-request creation. It is not accepted and does not enable remote write capabilities.
+
+[Proposed ADR-0009](0009-external-vm-acceptance-testing-strategy.md) defines a credential-isolated strategy for external VM-based acceptance testing in Phase 5b. It does not enable a provider or modify the Phase 5a workstation boundary.
+
+[Proposed ADR-0010](0010-maintainer-operations-strategy.md) defines per-operation approvals, short-lived credentials, audit requirements, and failure controls for Level 3 maintainer actions. It does not enable maintainer capabilities or change the paused Phase 6b status.
