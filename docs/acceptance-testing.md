@@ -2,7 +2,9 @@
 
 ## Status and scope
 
-This is the proposed design for Phase 5. Acceptance testing is not implemented, no provider is enabled, and no new credentials or target infrastructure are configured. The proposal preserves ADR-0004's build-only Puppet repository secret boundary and ADR-0005's ephemeral Copilot authentication.
+This document records the Phase 5 design and current validation. The Phase 5a acceptance identity, transient delegated Podman API helper, and synthetic Litmus fixture are present. A finite `--pids-limit=1024` resolved the observed zero-limit behavior; four serial minimal Puppet apply/assertion runs passed, a controlled assertion failure was detected and torn down, and a fresh subsequent run passed. The [Phase 5a validation report](phase5a-validation-report.md) records the cleanup evidence. ADR-0006 remains Proposed pending the maintainers' acceptance decision. The design preserves ADR-0004's build-only Puppet repository secret boundary and ADR-0005's ephemeral Copilot authentication.
+
+The dedicated VM specification, provisioning guide, validation checklist, diagnostics, and ADR-0006 acceptance gate are in [Acceptance Testing Validation Phase 1](acceptance-validation-phase1.md). The current Phase 5a validation does not change ADR-0006's Proposed status.
 
 The assessment is qualitative, not a current market-share survey. Litmus and Beaker are test frameworks; Docker, Podman, nested KVM, and EC2 are target or provisioning technologies. A framework does not itself isolate the code or target it runs.
 

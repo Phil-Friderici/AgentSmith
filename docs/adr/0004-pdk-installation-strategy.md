@@ -3,6 +3,7 @@
 ## Status
 
 Accepted and Validated
+Validation: Operationally validated on 2026-11-18.
 
 ## Context
 

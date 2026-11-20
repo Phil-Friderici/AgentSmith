@@ -1,229 +1,381 @@
 # ADR-0006: Acceptance Testing Platform
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-18
 - Deciders: AgentForge maintainers
 
 ## Context
 
-Phase 4 supports PDK validation and unit tests, but not Puppet acceptance tests. Acceptance testing requires a framework and disposable target environments while preserving the no-Docker-socket workstation baseline, rootless operation where practical, and the secret-management boundaries established by ADR-0004 and ADR-0005.
+Phase 4 supports PDK validation and unit tests, but not Puppet acceptance tests.
 
-Litmus and Beaker are testing frameworks. Docker, Podman, KVM, and EC2 are target-provider implementations. Their suitability depends on the module under test, platform capabilities, security constraints, and operational requirements.
+Acceptance testing requirements differ significantly between Puppet modules.
 
-No acceptance-test provider has been enabled in AgentForge.
+Most modern Puppet modules can be validated with containerized targets using Litmus.
 
-A compatibility spike was attempted to validate Litmus with rootless Podman. The spike could not be completed because the host platform prevented user namespace creation.
+A smaller subset of modules requires:
 
-The observed result was:
+- existing Beaker suites
+- Vagrant-based workflows
+- Windows targets
+- Solaris targets
+- FreeBSD targets
+- reboot testing
+- full virtual-machine fidelity
 
-```text
-unshare -Ur true
-→ Operation not permitted
-```
+AgentForge should prefer the simplest provider capable of executing the required acceptance test workload.
 
-The spike demonstrates only that the current host environment cannot validate rootless Podman. It does not demonstrate incompatibility between Litmus and rootless Podman.
+The workstation must continue to preserve:
 
-## Proposed Decision
+- ADR-0004 BuildKit secret boundaries
+- ADR-0005 authentication boundaries
+- least-privilege operation
+- no Docker daemon access from the normal workstation
 
-- Use Litmus as the default framework for new acceptance-testing workflows.
-- Prefer rootless Podman as the default target provider.
-- Run acceptance tests inside a dedicated, disposable acceptance-provider boundary.
-- Do not expose Docker sockets or Podman sockets to the normal AgentForge workstation.
-- Retain Beaker only for modules with an existing Beaker-based acceptance-test workflow.
-- Keep EC2 as an optional provider when cloud fidelity, operating-system coverage, or isolation requirements justify the additional complexity.
-- Avoid nested KVM by default. Use it only when a module explicitly requires full virtual-machine fidelity and a separate reviewed virtualization boundary is available.
-- Require a successful compatibility spike before enabling any provider in the supported AgentForge workflow.
+## Decision
 
-If Litmus cannot safely and reliably operate with rootless Podman after validation on a suitable platform:
+Acceptance testing is divided into two implementation stages.
 
-- evaluate EC2 as the preferred provider, or
-- create a separate architectural proposal for a dedicated rootless Docker-based provider.
+### Phase 5a – Local Container Acceptance Testing
 
-Do not fall back to mounting a general-purpose Docker daemon socket into the workstation.
-
-## Validation Status
-
-A compatibility spike was executed on the current host platform.
-
-The spike could not proceed because the required rootless-user-namespace functionality was unavailable.
-
-Observed validation result:
+Goal:
 
 ```text
-unshare -Ur true
-→ Operation not permitted
+Operator
+    ↓ explicit invocation
+Isolated acceptance runner (Litmus)
+    ↓ rootless Podman API over owner-restricted Unix socket
+Rootless Podman
+    ↓
+Disposable container target
 ```
 
-As a result:
+Characteristics:
 
-- Rootless Podman remains the preferred provider candidate.
-- Rootless Podman is not yet validated.
-- Litmus acceptance testing is not yet validated.
-- No supported acceptance-testing provider has been approved.
-- This ADR remains in Proposed status.
+- Litmus 2.8.2 is the selected acceptance-testing framework.
+- Litmus's built-in `docker_exp` provisioner is the selected provider.
+- Podman 4.9.3+ds1-1ubuntu0.2 is the validated container runtime.
+- The provider connects to rootless Podman through a run-scoped Unix API socket.
+- The socket is available only within the explicitly invoked acceptance boundary.
+- The socket is never exposed over TCP.
+- The socket is never mounted into targets.
+- The socket is never available to normal Level 0 or Level 1 workstation services.
+- Acceptance execution uses a dedicated unprivileged identity.
+- Acceptance execution uses private Podman storage.
+- The acceptance identity receives no Copilot authentication state.
+- The acceptance identity receives no GitHub authentication.
+- The acceptance identity receives no Puppet repository credentials.
+- Only a staged, credential-free module snapshot and selected test artifacts cross the boundary.
+- Socket access is considered a high-impact capability and must remain run-scoped and owner-restricted.
+- Docker daemon access remains prohibited.
+- Containers use a validated delegated absolute cgroup parent.
+- Containers use a validated finite PIDs limit of 1024.
 
-A future validation environment should provide:
+This phase is intended for:
 
-- Ubuntu 24.04
-- Rootless Podman
-- User namespaces enabled
-- Subordinate UID/GID mappings
-- Litmus provisioning support
-- Disposable test targets
-- Automated cleanup verification
+- Ubuntu
+- Debian
+- Rocky Linux
+- AlmaLinux
+- other container-compatible Linux distributions
 
-Successful validation must prove:
+The objective is to support the majority of Puppet Forge modules without requiring additional infrastructure.
 
-- Target provisioning
+### Phase 5b – External VM Acceptance Testing
+
+Used only when container targets are insufficient.
+
+Goal:
+
+```text
+AgentForge
+    ↓
+External Validation Host
+    ↓
+Vagrant / Beaker / EC2
+    ↓
+Virtual Machine Target
+```
+
+Characteristics:
+
+- Separate validation infrastructure.
+- Not part of the normal workstation lifecycle.
+- Explicit operator invocation.
+- Disposable validation environment.
+- No shared home directories.
+- No shared secrets.
+- No workstation credential propagation.
+
+Candidate technologies:
+
+- Beaker
+- Vagrant
+- EC2-backed targets
+- Nested virtualization
+
+This phase is intended for:
+
+- Windows
+- Solaris
+- FreeBSD
+- reboot validation
+- virtualization-specific modules
+- legacy Beaker suites
+- modules requiring full-system behaviour
+
+## Validation Strategy
+
+### Phase 5a Validation
+
+Required before acceptance:
+
+- User namespaces available
+- Rootless Podman operational
+- Litmus operational
+- Target provisioning succeeds
+- Puppet apply succeeds
+- Acceptance tests execute
+- Cleanup succeeds
+- Repeated runs show no environment drift
+
+Additional validation requirements:
+
+- Verify the Podman API socket is rootless.
+- Verify the Podman API socket is Unix-only.
+- Verify the Podman API socket is owner-restricted.
+- Verify the Podman API socket is unavailable to Level 0 services.
+- Verify the Podman API socket is unavailable to Level 1 services.
+- Verify the Podman API socket is unavailable to acceptance targets.
+- Verify the socket is removed after the acceptance run completes.
+
+API compatibility alone is insufficient.
+
+Validation must demonstrate:
+
+- target provisioning
 - Puppet apply execution
-- Acceptance-test execution
-- Artifact collection
-- Reliable teardown
-- Repeated execution without environment drift
+- acceptance assertions
+- target destruction
+- repeat execution
+
+Validation completed on 2026-11-20 demonstrated:
+
+- Rootless Podman operation
+- Litmus 2.8.2 operation
+- `docker_exp` provisioning
+- Puppet apply execution
+- Acceptance assertion execution
+- Successful target teardown
+- Controlled-failure cleanup
+- Repeated successful execution
+- Cleanup after failure
+- Cleanup after success
+
+Validation was performed against a synthetic Ubuntu target.
+
+Successful validation does not imply support for every Puppet module or operating system.
+
+### Phase 5b Validation
+
+Required before acceptance:
+
+- Dedicated validation host available
+- Provider provisioning succeeds
+- Guest lifecycle succeeds
+- Test execution succeeds
+- Cleanup succeeds
+- Costs and operational burden documented
 
 ## Alternatives Considered
 
+### Rootless Podman API socket in the acceptance boundary
+
+Accepted for Phase 5a.
+
+Phase 5a validation confirmed that Litmus 2.8.2 can operate securely through a rootless Podman Unix socket confined to the acceptance boundary.
+
+Litmus 2.8.2 does not provide a built-in Podman CLI provisioner.
+
+The built-in `docker_exp` provisioner requires a Docker-compatible API endpoint.
+
+Rootless Podman can provide that endpoint through a Unix socket.
+
+This decision:
+
+- does not authorize Docker daemon access
+- does not authorize Docker socket mounts
+- does not authorize TCP-exposed Podman APIs
+
+The socket:
+
+- must be rootless
+- must be Unix-only
+- must be owner-restricted
+- must be run-scoped
+- must exist only inside the acceptance-testing boundary
+
+If those requirements cannot be enforced, Phase 5a must stop and be reassessed.
+
 ### Beaker as the default
 
-Retained only as a compatibility option.
+Rejected.
 
-Advantages:
+Reason:
 
-- Strong support for existing legacy Puppet acceptance suites.
-- Familiar workflow for older Forge modules.
+- Unnecessary complexity for the majority of modules.
+- Requires VM-centric workflows.
 
-Disadvantages:
+### EC2 for all acceptance testing
 
-- Additional complexity.
-- Less aligned with modern container-based workflows.
-- Does not provide a simpler security model.
+Rejected.
+
+Reason:
+
+- Additional cost.
+- Increased setup complexity.
+- Slower development feedback cycle.
 
 ### Docker socket in the workstation
 
 Rejected.
 
-Advantages:
+Reason:
 
-- Simple integration.
-- Broad ecosystem support.
+- Excessive privilege.
+- Violates least-privilege design.
 
-Disadvantages:
-
-- Grants broad control over the container runtime.
-- Significantly expands workstation privileges.
-- Contradicts the least-privilege goals of AgentForge.
-
-### Rootless Podman exposed directly to the workstation
+### Rootless Podman as the only provider
 
 Rejected.
 
-Advantages:
+Reason:
 
-- Avoids a Docker daemon dependency.
-- Better privilege separation than a traditional Docker socket.
-
-Disadvantages:
-
-- The Podman API remains a high-impact capability.
-- Broadens the workstation trust boundary.
-- Reduces isolation between development and test execution.
-
-### Nested KVM
-
-Deferred.
-
-Advantages:
-
-- High-fidelity operating-system testing.
-- Closest approximation to production virtual-machine deployments.
-
-Disadvantages:
-
-- Additional infrastructure complexity.
-- Requires virtualization support from the host platform.
-- Increased operational overhead.
-
-### EC2 for all testing
-
-Rejected as the default.
-
-Advantages:
-
-- Strong isolation.
-- Broad operating-system coverage.
-- Realistic cloud execution environment.
-
-Disadvantages:
-
-- Cloud credentials required.
-- Increased cost.
-- Slower feedback loop.
-- Additional provisioning complexity.
+- Some Puppet modules require VM-level behaviour.
 
 ## Consequences
 
-- Litmus and Podman versions remain unselected until provider validation succeeds.
-- A target-specific Puppet Agent version will be required before provider images can be finalized.
-- Provider images that require protected Puppet repositories must follow the BuildKit-secret workflow defined in ADR-0004.
-- Runtime acceptance targets must never receive Puppet repository credentials.
-- Provider credentials, if used, must be short-lived and scoped to a single execution.
-- Authentication data must never persist in repositories, workspaces, caches, Copilot state, or generated artifacts.
-- Acceptance testing remains opt-in and disabled until this ADR is accepted.
-- Phase 5 implementation requires:
-  - Target selection
-  - Resource limits
-  - Artifact handling
-  - Cleanup verification
-  - Failure recovery procedures
+### Positive
 
-Acceptance-testing enablement supersedes only the acceptance-test deferral established in ADR-0002.
+- Lower barrier to entry.
+- Faster local validation.
+- Majority of modules require no cloud resources.
+- Clear escalation path for complex modules.
+- Preserves workstation security boundaries.
 
-ADR-0004 and ADR-0005 remain unchanged.
+### Negative
 
-## Security and Operations
-
-Acceptance execution must be isolated from normal Level 0 and Level 1 workstation operations.
-
-Acceptance environments must not receive:
-
-- Docker daemon access from the workstation
-- Host home-directory mounts
-- Persistent Copilot state
-- Broad workspace access
-- Puppet repository credentials
-
-Rootless Podman reduces privilege requirements but is not considered a security sandbox.
-
-Provider APIs, sockets, or management interfaces are high-impact capabilities and must remain within the disposable acceptance-test boundary.
-
-Acceptance targets must:
-
-- Be disposable
-- Be version-pinned
-- Be allow-listed
-- Be automatically cleaned up after execution
-- Be cleaned up after interruption or failure
-
-Any remote-provider credentials must:
-
-- Be execution-scoped
-- Be excluded from logs
-- Be excluded from persistent storage
-- Be excluded from session-state persistence
+- Two acceptance-test workflows must be maintained.
+- Module maintainers must select the appropriate provider.
+- Some test suites may require migration work.
 
 ## Open Questions
 
-- Does Litmus operate reliably with rootless Podman on a supported Ubuntu 24.04 host?
-- Which Litmus version should be pinned?
-- Which Podman version should be pinned?
-- Is a dedicated acceptance-provider container sufficient, or is a separate VM boundary preferable?
-- Under which conditions should EC2 become the preferred acceptance provider?
-- What artifact-retention policy should apply to acceptance-test outputs?
-- What resource limits should be imposed on acceptance targets?
+### Phase 5a
+
+Closed through operational validation.
+
+Validated selections:
+
+- Litmus 2.8.2
+- Podman 4.9.3+ds1-1ubuntu0.2
+- `docker_exp` provisioner
+- Rootless Podman Unix socket
+- Delegated absolute cgroup parent
+- PIDs limit of 1024
+
+### Phase 5b
+
+- Should EC2 or Vagrant be the preferred VM provider?
+- Which guest operating systems should be officially supported?
+- What cost controls should be enforced?
+
+### Current Validation Findings
+
+Operational validation completed successfully on 2026-11-20.
+
+Validation confirmed:
+
+- Rootless Podman operation
+- Delegated cgroup placement
+- Litmus 2.8.2 provisioning
+- `docker_exp` operation
+- Puppet apply execution
+- Acceptance assertion execution
+- Controlled-failure handling
+- Cleanup verification
+- Repeatability across multiple runs
+
+Observed security properties:
+
+- `Privileged=false`
+- Private cgroup namespace
+- No added capabilities
+- No devices
+- No published ports
+- `network=none`
+- Read-only cgroup mount
+- Rootless execution
+- Run-scoped Unix socket
+- No Puppet repository credentials in targets
+- No Copilot authentication artifacts in targets
+
+Validation used a synthetic Ubuntu target.
+
+Further validation may be required for additional operating systems, providers, or module-specific acceptance suites.
+
+## Validation Status
+
+Phase 5a was operationally validated on 2026-11-20.
+
+Validated workflow:
+
+```text
+Provision target
+↓
+Apply Puppet resource
+↓
+Execute acceptance assertion
+↓
+Destroy target
+↓
+Verify cleanup
+↓
+Repeat
+```
+
+Validation included:
+
+- Successful execution
+- Controlled failure execution
+- Cleanup after success
+- Cleanup after failure
+- Repeat execution from a clean environment
+
+Phase 5a is considered implemented and validated.
+
+Phase 5b remains unimplemented and subject to future validation.
+
+## Security and Operations
+
+Container-based acceptance testing must:
+
+- remain rootless
+- use disposable targets
+- avoid Docker daemon access
+- avoid workstation credential propagation
+
+VM-based acceptance testing must:
+
+- use isolated infrastructure
+- receive no Puppet repository credentials
+- receive no Copilot authentication state
+- receive no workstation secrets
+- be fully disposable
 
 ## References
 
-- ADR-0002: Initial Implementation Policy
 - ADR-0004: PDK Installation Strategy
 - ADR-0005: Copilot Authentication and State Management
 - docs/acceptance-testing.md
+- docs/acceptance-validation-phase1.md
+- docs/phase5a-validation-report.md

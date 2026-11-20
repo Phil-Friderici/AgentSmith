@@ -87,7 +87,7 @@ The container shell is replaceable. Repositories under the host-mounted workspac
 | Node.js | 22.23.5, downloaded from nodejs.org and SHA-256 verified for amd64/arm64 |
 | Copilot CLI | 1.0.112 from the npm lockfile; automatic updates disabled |
 | GitHub CLI | Deferred; unauthenticated by default |
-| Litmus and Beaker | Not installed. Phase 5 proposes Litmus with an isolated rootless Podman provider; no acceptance provider is enabled. |
+| Litmus and Beaker | `puppet_litmus` 2.8.2 is pinned by the Phase 5a fixture and runs only in the dedicated acceptance identity. The opt-in rootless Podman Phase 5a synthetic workflow passed repeatability and controlled-failure cleanup validation with a finite PIDs limit of 1024. The report records scope and remaining support limitations. |
 | Docker CLI/daemon access in the container | Not provided; no socket is mounted |
 | MCP | Disabled; no server or client configuration is loaded |
 | Persistent Copilot settings/session state | `settings.json`, `session-state/`, and `session-store.db` only, under `~/AgentForge/state/copilot`; authentication and logs are ephemeral |

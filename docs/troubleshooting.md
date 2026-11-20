@@ -37,6 +37,12 @@ When starting Copilot with a separate `docker exec`, set `umask 077` in that pro
 
 Docker CLI/daemon access is intentionally not exposed inside the workstation. Use Docker Compose on the host to build and start AgentForge. Do not mount `/var/run/docker.sock`; access to the host daemon would bypass the workstation's container boundary.
 
+## Rootless Podman container start fails with cgroup permission denied
+
+The short relative `--cgroup-parent=agentforge-containers` resolved outside the unit, but the absolute `/system.slice/agentforge-acceptance-phase5a-podman.service/agentforge-containers` parent placed the running canary beneath the delegated subtree. See the [Phase 5a validation report](phase5a-validation-report.md).
+
+With `HostConfig.PidsLimit=0`, the tested rootless runtime produced `pids.max=1`. The Phase 5a fixture now supplies the finite `--pids-limit=1024`; verify that the effective cgroup `pids.max` matches before running tests, then check shell startup and child-process creation. Do not remove resource limits or enable privileged containers, Docker daemon access, linger, or broader cgroup permissions as workarounds.
+
 ## A requested development tool is missing
 
 The image includes Git, Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, Node.js 22.23.5, and Copilot CLI 1.0.112. GitHub CLI, system Puppet Agent, Litmus, and Beaker remain deferred. If a pinned tool is missing or mismatched, rebuild from the current `containers/Dockerfile`; do not install alternate toolchain versions into a running container.

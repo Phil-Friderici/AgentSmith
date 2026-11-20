@@ -1,0 +1,16 @@
+phase5a:
+  provisioner: docker_exp
+  images:
+    - localhost/agentforge-phase5a:validation
+  vars: |
+    docker_run_opts:
+      - --privileged=false
+      - --cap-drop=ALL
+      - --security-opt=no-new-privileges
+      - --network=none
+      - --pids-limit=1024
+      - --cgroupns=private
+      - --cgroup-parent=/system.slice/agentforge-acceptance-phase5a-podman.service/agentforge-containers
+      - --volume /sys/fs/cgroup:/sys/fs/cgroup:ro
+  params:
+    DOCKER_HOST: unix:///run/agentforge-acceptance/999/phase5a/podman.sock

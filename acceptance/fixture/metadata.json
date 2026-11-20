@@ -1,0 +1,23 @@
+{
+  "name": "agentforge-acceptance_fixture",
+  "version": "0.1.0",
+  "author": "AgentForge",
+  "summary": "Synthetic AgentForge Litmus acceptance fixture",
+  "license": "Apache-2.0",
+  "source": "https://github.com/Phil-Friderici/AgentSmith",
+  "project_page": null,
+  "issues_url": null,
+  "dependencies": [],
+  "operatingsystem_support": [
+    {
+      "operatingsystem": "Ubuntu",
+      "operatingsystemrelease": ["24.04"]
+    }
+  ],
+  "requirements": [
+    {
+      "name": "puppet",
+      "version_requirement": ">= 8.0.0 < 9.0.0"
+    }
+  ]
+}

@@ -35,9 +35,9 @@ The image sets `COPILOT_AUTO_UPDATE=false`. Copilot CLI 1.0.112 documents that t
 
 The CLI documents `config.json` as managed state that can include signed-in accounts, and its login help warns that tokens may fall back to plaintext there if no credential store is available. The file is not persisted. A successful login was not performed during implementation; verifying actual files created/modified and authentication loss after container recreation is a future operational task.
 
-## Proposed acceptance toolchain
+## Phase 5a validation toolchain
 
-Phase 5 proposes Litmus as the primary framework, rootless Podman as the local disposable target provider, and Beaker only for compatibility with a module that already uses it. No versions are selected, installed, or tested. The Litmus/Podman compatibility spike and module-specific Puppet Agent version decision must precede implementation. EC2 remains opt-in; nested KVM is not the default. See [Puppet Acceptance Testing Design](acceptance-testing.md).
+The current validation candidate uses Podman `4.9.3`, Ruby `3.2.3`, `puppet_litmus` `2.8.2`, and a locked fixture bundle. Rootless Podman API startup, user-namespace mapping, delegated cgroup placement using an absolute parent, target-image build, and the finite `--pids-limit=1024` passed validation. Four serial minimal Puppet apply/assertion runs passed; a controlled assertion failure cleaned up, and a subsequent fresh run passed. The result validates the synthetic Ubuntu target only; see the [Phase 5a validation report](phase5a-validation-report.md). ADR-0006 remains Proposed pending the maintainers' decision.
 
 ## Deferred versions
 
