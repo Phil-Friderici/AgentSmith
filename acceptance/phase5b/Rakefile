@@ -1,0 +1,86 @@
+require 'open3'
+require 'rake'
+require 'rbconfig'
+
+load File.expand_path('../fixture/Rakefile', __dir__)
+
+PROVISION_REVISION = '4b444d86b533dfc887266a51a9f089b4bae8ea7d'
+PROVISION_PATCHER = File.join(__dir__, 'patches', 'patch-provision.rb')
+
+ENV['PATH'] = [File.join(__dir__, 'bin'), ENV.fetch('PATH', '')]
+  .reject(&:empty?)
+  .join(File::PATH_SEPARATOR)
+
+Rake::Task['spec_prep'].enhance do
+  provision_path = File.join(Dir.pwd, 'spec', 'fixtures', 'modules', 'provision')
+  revision, status = Open3.capture2('git', '-C', provision_path, 'rev-parse', 'HEAD')
+  raise "Unexpected puppetlabs/provision revision: #{revision.strip}" unless status.success? && revision.strip == PROVISION_REVISION
+
+  patched = system(RbConfig.ruby, PROVISION_PATCHER, provision_path, PROVISION_REVISION)
+  raise 'Failed to apply the pinned provision-module compatibility patch' unless patched
+end
+
+namespace :phase5b do
+  desc 'Prepare the pinned Litmus provision fixture'
+  task :prepare do
+    Rake::Task['spec_prep'].invoke
+  end
+
+  desc 'Provision the configured Phase 5b target'
+  task :provision do
+    Rake::Task['phase5b:prepare'].invoke
+    Rake::Task['litmus:provision_list'].invoke('phase5b')
+  end
+
+  desc 'Check connectivity to Phase 5b targets'
+  task :connectivity do
+    Rake::Task['litmus:check_connectivity'].invoke
+  end
+
+  desc 'Tear down Phase 5b targets'
+  task :teardown do
+    Rake::Task['litmus:tear_down'].invoke
+  end
+
+  desc 'Remove stale inventory only after confirming its libvirt domain and disk are absent'
+  task :reconcile do
+    Rake::Task['phase5b:prepare'].invoke
+    $LOAD_PATH.unshift(File.join(__dir__, 'spec', 'fixtures', 'modules', 'provision', 'lib'))
+    require 'inventory_helper'
+
+    inventory_path = File.join(__dir__, 'spec', 'fixtures', 'litmus_inventory.yaml')
+    inventory = InventoryHelper.open(inventory_path)
+    vagrant_root = File.expand_path('spec/fixtures/.vagrant', __dir__)
+    vagrant_targets = inventory['groups'].flat_map { |group| group['targets'] }.select do |target|
+      target.dig('facts', 'provisioner') == 'vagrant'
+    end
+    raise 'A Vagrant inventory target is missing its Vagrant state path' if vagrant_targets.any? { |target| target.dig('facts', 'vagrant_env').nil? }
+
+    stale_targets = vagrant_targets.reject { |target| File.directory?(target.dig('facts', 'vagrant_env')) }
+
+    domains, domain_status = Open3.capture2('virsh', 'list', '--all', '--name')
+    volumes, volume_status = Open3.capture2('virsh', 'vol-list', 'default')
+    raise 'Failed to inspect libvirt domain inventory' unless domain_status.success?
+    raise 'Failed to inspect the default libvirt storage pool' unless volume_status.success?
+    volume_names = volumes.lines.map { |line| line.split.first }.reject do |name|
+      name.nil? || name == 'Name' || name.match?(/\A-+\z/)
+    end
+
+    stale_targets.each do |target|
+      vagrant_env = File.expand_path(target.dig('facts', 'vagrant_env'))
+      unless vagrant_env.start_with?("#{vagrant_root}#{File::SEPARATOR}")
+        raise "Refusing to reconcile an out-of-workspace Vagrant target: #{vagrant_env}"
+      end
+
+      domain_name = "#{File.basename(vagrant_env)}_default"
+      disk_name = "#{domain_name}.img"
+      if domains.lines.map(&:strip).include?(domain_name) || volume_names.include?(disk_name)
+        raise "Refusing to remove stale inventory while libvirt resources remain for #{domain_name}"
+      end
+    end
+
+    stale_targets.each { |target| inventory.remove(target) }
+    inventory.save unless stale_targets.empty?
+    puts "Reconciled #{stale_targets.length} stale Vagrant inventory target(s)"
+  end
+end

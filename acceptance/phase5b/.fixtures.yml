@@ -1,0 +1,5 @@
+fixtures:
+  repositories:
+    provision:
+      repo: https://github.com/puppetlabs/provision.git
+      ref: 4b444d86b533dfc887266a51a9f089b4bae8ea7d

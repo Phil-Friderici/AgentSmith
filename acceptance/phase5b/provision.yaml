@@ -1,0 +1,9 @@
+phase5b:
+  provisioner: vagrant
+  images:
+    - generic/ubuntu2204
+  params:
+    vagrant_provider: libvirt
+    vagrant_cpus: 2
+    vagrant_memory: 2048
+    vagrant_enable_synced_folder: false

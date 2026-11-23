@@ -1,0 +1,21 @@
+{
+  "name": "agentforge-acceptance_fixture",
+  "version": "0.1.0",
+  "author": "AgentForge",
+  "summary": "Disposable Litmus Vagrant/libvirt provisioning fixture",
+  "license": "Apache-2.0",
+  "source": "https://github.com/Phil-Friderici/AgentSmith",
+  "dependencies": [],
+  "operatingsystem_support": [
+    {
+      "operatingsystem": "Ubuntu",
+      "operatingsystemrelease": ["22.04"]
+    }
+  ],
+  "requirements": [
+    {
+      "name": "puppet",
+      "version_requirement": ">= 8.0.0 < 9.0.0"
+    }
+  ]
+}

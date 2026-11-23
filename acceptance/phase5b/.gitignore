@@ -1,0 +1,4 @@
+/spec/fixtures/modules/
+/spec/fixtures/.vagrant/
+/spec/fixtures/manifests/site.pp
+/spec/fixtures/litmus_inventory.yaml
