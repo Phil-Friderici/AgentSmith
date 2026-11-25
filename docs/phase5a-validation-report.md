@@ -8,6 +8,8 @@ ADR-0006 is Accepted. The successful completion of the Phase 5a validation progr
 
 Validation was performed on Ubuntu 24.04 with Podman 4.9.3, systemd 255, cgroup v2, Ruby 3.2.3, and `puppet_litmus` 2.8.2.
 
+**Historical-runtime distinction:** The Phase 5a implementation, preflight, and initial end-to-end results below used system Ruby 3.2.3 and the system-Ruby bundle. They remain unchanged historical evidence. The later PDK-managed migration validation near the end of this report is additional evidence, not a retroactive change to those runs.
+
 ## Implementation and preflight
 
 `scripts/acceptance/podman-api-service.sh` now starts a transient systemd service for UID/GID 999 with `Delegate=yes`, a private runtime directory, explicit rootless storage/runroot paths, and a Unix-only Podman API socket. The service and socket were owned by the acceptance identity; the runtime directory was mode `0700`, the socket mode `0600`, and the API ping succeeded. The service had no TCP listener, and the calling operator could not access the private runtime directory.
@@ -104,3 +106,25 @@ Use `/system.slice/agentforge-acceptance-phase5a-podman.service/agentforge-conta
    > These results validate the synthetic Ubuntu target and do not claim compatibility with every module, target OS, or workload. Phase 5b remains separate.
 
 Keep the Phase 5b open questions open; this validation does not resolve them.
+
+## PDK-managed Litmus migration validation
+
+The PDK-managed bundle was validated after the Podman runroot reconciliation. The run used PDK `4.0.1`, its managed Ruby `3.2.11` / Puppet `8.22.0`, Bundler `2.4.20`, and the fixture's locked `puppet_litmus` `2.8.2`.
+
+| Check | Result |
+|---|---|
+| `pdk bundle install` | Passed. Native extensions for `nkf`, `bigdecimal`, `io-console`, `json`, and `stringio` compiled with `build-essential`. |
+| `pdk bundle exec rake -T litmus` | Passed; Litmus tasks loaded under PDK-managed Ruby. |
+| Provider and target | Existing `docker_exp` provider and Phase 5a target configuration were preserved. |
+| Podman API lifecycle and runroot reconciliation | `podman info`, service start, shutdown, restart, and post-restart `podman info` passed. The new graphroot `/var/lib/agentforge-acceptance/podman-storage-phase5a-reconcile` and runroot `/run/agentforge-acceptance/999/phase5a/containers` matched; the existing graphroot was not modified or deleted. |
+| PDK-managed acceptance workflow | Targets `264882cd18ca` and `b26721049d77` each passed provisioning, connectivity, `litmus:acceptance:parallel` (one example, zero failures), and teardown through the wrapper. |
+| Wrapper failure cleanup | A controlled assertion failure on target `b6ebceaa0f93` produced one RSpec failure; the wrapper automatically ran Litmus teardown, confirmed no container remained, and returned nonzero. A fresh successful run followed. |
+| Lockfile | No changes. |
+
+`build-essential` was added to the workstation base image as `12.10ubuntu1`, adding the standard compiler, `make`, and C library development headers to the image; image-size impact was not measured. The PDK-managed Ruby provides its own headers, so system `ruby-dev` packages were not needed. This confirms that the standard build toolchain unblocks the native gems in this fixture and that the Phase 5a Litmus workflow runs under the tested PDK runtime. It does not claim compatibility with other module bundles or target configurations. The four-run repeated-success dataset and its controlled-failure run above used the earlier system-Ruby bundle. The separate PDK-managed workflow recorded here additionally completed two successful runs and a controlled-failure cleanup run.
+
+**Migration result:** PDK-managed Litmus execution is viable for the existing Phase 5a workflow. The remaining limitations are the documented Phase 5b production-hardening and cross-module compatibility work; provider selection, target configuration, and acceptance-test scope were not changed.
+
+The VS Code entry point is `scripts/acceptance/run-pdk-litmus.sh`. It stages only the fixture into the acceptance identity's private home, rejects unlisted or symlinked fixture entries, invokes PDK as UID 999 with an allowlisted environment, and checks that locked files remain unchanged. Its `clean` and `stop-provider` actions refuse to proceed while containers remain and do not remove the graphroot. Wrapper staging, bundle installation, version reporting, Litmus task loading, provider startup, two successful one-example runs, controlled assertion-failure cleanup, staged-fixture cleanup, and provider shutdown passed end to end. Targets `264882cd18ca`, `b6ebceaa0f93`, and `b26721049d77` were removed; the API runtime/socket stopped and graphroot was preserved. The wrapper reports the Litmus gem version from Bundler's gem metadata because this bundle does not provide a `litmus` executable.
+
+The PDK-managed workflow's task sequence and boundary are documented in [Acceptance Testing](acceptance-testing.md). For the configured Phase 5a target list, the wrapper uses `litmus:provision_list[phase5a]`; Litmus's parameterized `litmus:provision[...]` task is also available. The Podman graphroot/runroot reconciliation is resolved for this configuration and passed `podman info`, API service start/shutdown/restart, and post-restart `podman info` checks.

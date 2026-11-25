@@ -63,6 +63,8 @@ unset PUPPET_REPO_CREDENTIALS
 
 Never put credential contents in an environment variable, command argument, repository file, or chat. Do not enable shell tracing. If the build fails, do not print the auth file; see [Secret Management](secret-management.md) and [Troubleshooting](troubleshooting.md).
 
+The workstation base includes the pinned `build-essential` package. PDK-managed Litmus dependency installation needs `make`, a C compiler, and C library headers to build native gem extensions; the PDK-managed Ruby supplies its own Ruby headers, so system `ruby-dev` packages are not required for this workflow.
+
 ## Start a workstation
 
 After building the image, start a normal service without the build-only Compose override:
@@ -82,17 +84,51 @@ The container shell is replaceable. Repositories under the host-mounted workspac
 | --- | --- |
 | Ubuntu 24.04, Git | Included and pinned |
 | Ruby 3.2.3, Bundler 2.4.20 | Included and pinned |
+| Native build tools | `build-essential` 12.10ubuntu1, included for PDK-managed native gem builds |
 | PDK 4.0.1 (`4.0.1.1-1noble`) | Installed into the image; build requires the external BuildKit secret |
 | Puppet Agent | Not installed; no version is required by PDK's package metadata, and the module-specific version remains unselected |
 | Node.js | 22.23.5, downloaded from nodejs.org and SHA-256 verified for amd64/arm64 |
 | Copilot CLI | 1.0.112 from the npm lockfile; automatic updates disabled |
 | GitHub CLI | 2.105.0 in the Level 1 image only; no authentication or AgentForge GitHub commands are configured |
-| Litmus and Beaker | `puppet_litmus` 2.8.2 is pinned by the Phase 5a fixture and runs only in the dedicated acceptance identity. The opt-in rootless Podman Phase 5a synthetic workflow passed repeatability and controlled-failure cleanup validation with a finite PIDs limit of 1024. The report records scope and remaining support limitations. |
+| Litmus and Beaker | `puppet_litmus` 2.8.2 is pinned by the Phase 5a fixture and runs only in the dedicated acceptance identity through `pdk bundle`. The PDK-managed bundle and Litmus workflow were validated; the report records versions, results, and remaining support limitations. |
 | Docker CLI/daemon access in the container | Not provided; no socket is mounted |
 | MCP | Disabled; no server or client configuration is loaded |
 | Persistent Copilot settings/session state | `settings.json`, `session-state/`, and `session-store.db` only, under `~/AgentForge/state/copilot`; authentication and logs are ephemeral |
 
 Version evidence and remaining compatibility limits are in [Toolchain Versions](toolchain-versions.md).
+
+## Install and run the Phase 5a Litmus bundle
+
+Run the Phase 5a workflow from the host-side repository checkout through the wrapper. VS Code tasks use the same wrapper and require a host-side task runner with `sudo`; they do not assume VS Code runs as the acceptance identity. If VS Code is attached to the normal workstation container, do not run these tasks there because it cannot access the host acceptance identity or Podman API. The wrapper stages only the fixture into the acceptance identity's private home, removes inherited environment variables, and invokes PDK as `agentforge-acceptance`:
+
+```sh
+sudo scripts/acceptance/run-pdk-litmus.sh stage
+sudo scripts/acceptance/run-pdk-litmus.sh install
+sudo scripts/acceptance/run-pdk-litmus.sh versions
+sudo scripts/acceptance/run-pdk-litmus.sh list
+sudo scripts/acceptance/run-pdk-litmus.sh start-provider
+sudo scripts/acceptance/run-pdk-litmus.sh provision
+sudo scripts/acceptance/run-pdk-litmus.sh connectivity
+sudo scripts/acceptance/run-pdk-litmus.sh acceptance
+sudo scripts/acceptance/run-pdk-litmus.sh teardown
+sudo scripts/acceptance/run-pdk-litmus.sh clean
+sudo scripts/acceptance/run-pdk-litmus.sh stop-provider
+```
+
+Run `teardown` after a successful test. If the acceptance task fails, the wrapper attempts Litmus teardown automatically and returns a failing status; inspect its cleanup result and run `teardown` manually if needed. `clean` refuses to remove the staged fixture while any Podman container remains; it preserves the reconciled graphroot and image. `stop-provider` also refuses to stop the API service while containers remain.
+
+The validated runtime is PDK 4.0.1, PDK-managed Ruby 3.2.11, Bundler 2.4.20, and Litmus 2.8.2. The equivalent PDK-managed task flow inside the acceptance boundary is:
+
+```sh
+pdk bundle install
+pdk bundle exec rake 'litmus:provision[provisioner,platform,inventory_vars]'
+pdk bundle exec rake litmus:install_agent
+pdk bundle exec rake litmus:install_module
+pdk bundle exec rake litmus:acceptance:parallel
+pdk bundle exec rake litmus:tear_down
+```
+
+For the current Phase 5a fixture, the wrapper's `provision` action uses `pdk bundle exec rake 'litmus:provision_list[phase5a]'` because the provider and target are configured in `provision.yaml`. The `install_agent` and `install_module` Rake tasks are available in the PDK bundle but are not separate wrapper actions; do not bypass the wrapper to invoke tasks from the normal workstation. See [Acceptance Testing](acceptance-testing.md) and the [Phase 5a validation report](phase5a-validation-report.md).
 
 ## Develop a Puppet module
 

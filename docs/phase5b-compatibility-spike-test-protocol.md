@@ -51,6 +51,8 @@ Dedicated validation host only.
 Requirements:
 
 - Ubuntu 24.04
+- PDK 4.0.1 with the locked Litmus fixture
+- `build-essential` for native gem extensions
 - Vagrant (pinned version)
 - VirtualBox (pinned version)
 - Litmus 2.8.2
@@ -86,13 +88,18 @@ Only one target may be active during the spike.
 
 ## Version Validation
 
+Run these checks only in the dedicated Phase 5b controller environment. The Phase 5a staging wrapper is specific to its Podman fixture and is not a Phase 5b runner.
+
 Record:
 
 ```bash
 vagrant version
 VBoxManage --version
-bundle exec litmus --version
-ruby --version
+pdk --version
+pdk bundle install
+pdk bundle exec ruby -e 'puts Gem::Specification.find_by_name("puppet_litmus").version'
+pdk bundle exec ruby --version
+pdk bundle exec bundle --version
 ```
 
 Capture results in:

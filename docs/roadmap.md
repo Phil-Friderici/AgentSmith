@@ -8,7 +8,7 @@ Phase 3 Copilot CLI integration and selective persistent state are implemented a
 
 Phase 4 Puppet module workflows are implemented and operationally validated, including the protected PDK package build workflow under ADR-0004.
 
-Phase 5a local container acceptance testing is implemented and operationally validated under ADR-0006 using Litmus 2.8.2, the docker_exp provisioner, and rootless Podman 4.9.3+ds1-1ubuntu0.2.
+Phase 5a local container acceptance testing is implemented and operationally validated under ADR-0006 using PDK-managed Litmus 2.8.2, the `docker_exp` provisioner, and rootless Podman 4.9.3+ds1-1ubuntu0.2. The validated runtime is PDK 4.0.1 / managed Ruby 3.2.11 / Bundler 2.4.20; the VS Code-to-Podman path remains inside the dedicated acceptance boundary.
 
 Phase 5b compatibility and integration validation for the external VM path is complete. Production hardening and operational rollout remain future work; the proposed provider, credential, isolation, cost, and cleanup strategy is recorded in [ADR-0009](adr/0009-external-vm-acceptance-testing-strategy.md).
 
@@ -140,8 +140,11 @@ Phase 4 is operationally validated for real-world Puppet module development work
 ### Completed in Phase 5a
 
 - Litmus 2.8.2 selected and validated.
+- PDK-managed bundle installation and Litmus task loading validated with PDK 4.0.1, Ruby 3.2.11, Bundler 2.4.20, and `build-essential` for native extensions.
 - `docker_exp` provisioner selected and validated.
 - Rootless Podman 4.9.3+ds1-1ubuntu0.2 selected and validated.
+- Podman runroot reconciliation validated with a new disposable graphroot; existing storage was preserved.
+- VS Code tasks route through the acceptance wrapper as `agentforge-acceptance`; two PDK-managed acceptance runs passed and controlled-failure cleanup succeeded.
 - Rootless Podman Unix socket boundary validated.
 - Delegated cgroup placement validated.
 - Puppet apply execution validated.
@@ -361,7 +364,7 @@ ADR-0010 acceptance satisfies the architecture and governance gates. Any future 
 - Level 3 remains disabled.
 - No maintainer operations are enabled.
 
-See: [Phase 7 Pause Decision](decisions/phase7-pause-decision.md)
+Phase 7 remains paused; see the [Phase 7 implementation plan](phase7-implementation-plan.md) for its current scope and gates.
 
 ## Ongoing maintenance
 

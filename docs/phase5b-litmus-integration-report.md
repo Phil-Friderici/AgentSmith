@@ -1,5 +1,7 @@
 # Phase 5b Litmus Integration Spike Report
 
+This report preserves the historical, incomplete Phase 5b integration spike. Its standalone `bundle` checks and blockers describe that attempt only; they are not the current Phase 5a Acceptance workflow, which was subsequently validated with PDK-managed Ruby/Bundler. See the [Phase 5a validation report](phase5a-validation-report.md) for the separate runtime and results.
+
 - Date: 2026-11-23
 - Scope: Litmus 2.8.2 with Vagrant/libvirt against one Ubuntu 22.04 target
 - Result: **Blocked before VM provisioning**

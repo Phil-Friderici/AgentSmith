@@ -45,7 +45,7 @@ With `HostConfig.PidsLimit=0`, the tested rootless runtime produced `pids.max=1`
 
 ## A requested development tool is missing
 
-The images include Git, Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, Node.js 22.23.5, and Copilot CLI 1.0.112; the Level 1 image additionally includes GitHub CLI 2.105.0. System Puppet Agent, Litmus, and Beaker remain deferred. If a pinned tool is missing or mismatched, rebuild from the current `containers/Dockerfile`; do not install alternate toolchain versions into a running container.
+The normal workstation images include Git, Ruby 3.2.3, Bundler 2.4.20, PDK 4.0.1, `build-essential` 12.10ubuntu1, Node.js 22.23.5, and Copilot CLI 1.0.112; the Level 1 image additionally includes GitHub CLI 2.105.0. System Puppet Agent and Beaker remain deferred, and Litmus is not installed in the normal workstation. The separate Phase 5a fixture runs Litmus 2.8.2 through PDK as `agentforge-acceptance`; see [Acceptance Testing](acceptance-testing.md). If a pinned tool is missing or mismatched, rebuild from the current `containers/Dockerfile`; do not install alternate toolchain versions into a running container.
 
 ## Puppet module dependency or validation failure
 

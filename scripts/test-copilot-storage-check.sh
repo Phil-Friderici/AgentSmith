@@ -19,6 +19,21 @@ printf '{}\n' > "$workspace/.github/copilot/settings.json"
 bash "$checker" state-root "$state"
 bash "$checker" workspace-cache "$workspace" "$cache" "$copilot_cache"
 
+mkdir -p "$workspace/.github/workflows"
+cat > "$workspace/.github/workflows/ci.yml" <<'YAML'
+permissions:
+  contents: read
+steps:
+  - env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    run: echo "$GITHUB_TOKEN"
+YAML
+cat > "$workspace/example.rb" <<'RUBY'
+token = ENV["GITHUB_TOKEN"]
+RUBY
+bash "$checker" workspace-cache "$workspace" "$cache"
+rm -rf -- "$workspace/.github/workflows" "$workspace/example.rb"
+
 printf '{"accessToken":{"type":"string"}}\n' > "$workspace/api.schema.json"
 bash "$checker" workspace-cache "$workspace" "$cache"
 rm -- "$workspace/api.schema.json"
@@ -43,6 +58,13 @@ if bash "$checker" state-root "$state" >/dev/null 2>&1; then
     exit 1
 fi
 rm -- "$state/session-state/events.jsonl"
+
+printf '%s\n' 'ghp_0123456789abcdefghijklmnopqrstuvwxyz' > "$workspace/example.txt"
+if bash "$checker" workspace-cache "$workspace" >/dev/null 2>&1; then
+    printf '%s\n' "FAIL: token-like workspace content was accepted" >&2
+    exit 1
+fi
+rm -- "$workspace/example.txt"
 
 mkdir "$workspace/.copilot"
 touch "$workspace/.copilot/config.json"

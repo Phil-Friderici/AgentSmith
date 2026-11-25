@@ -6,6 +6,8 @@ This document records the dedicated-environment requirements for the Litmus/root
 
 This phase provisions and validates a disposable VM and runs a bounded compatibility fixture. It does not enable acceptance testing in the normal AgentForge workstation, install an acceptance provider there, or change ADR-0004, ADR-0005, or the accepted decision in ADR-0006.
 
+**Current Phase 5a status:** The configured workflow is operationally validated with PDK 4.0.1, PDK-managed Ruby 3.2.11, Bundler 2.4.20, Litmus 2.8.2, `docker_exp`, and the existing target configuration. The recorded system-Ruby/Bundler validation remains historical; the subsequent PDK-managed runs, wrapper behavior, native extension build, and Podman runroot reconciliation are additional evidence in the [Phase 5a report](phase5a-validation-report.md). The normal workstation remains outside the acceptance boundary.
+
 ## Environment specification
 
 Use a dedicated Ubuntu Server 24.04 LTS x86_64 VM. Do not run this experiment inside the normal workstation container or on a shared host whose user-namespace policy is outside the operator's control. Ordinary VM virtualization is sufficient; nested KVM is not required.
@@ -25,12 +27,13 @@ These are conservative preparation values, not benchmark results. Do not run tar
 | Component | Phase 1 baseline | Status |
 | --- | --- | --- |
 | Ubuntu | 24.04 LTS, current patched point release | Recommended environment; record image ID and kernel version. |
-| Podman | `4.9.3+ds1-1ubuntu0.2` from the locally available Ubuntu Noble APT metadata | Candidate exact package pin. Confirm availability with `apt-cache policy podman`; stop rather than silently substitute a version if unavailable. |
-| Litmus | `puppet_litmus` gem `1.0.0` as the initial compatibility candidate | Candidate only; not an AgentForge-supported pin. Resolve and commit a `Gemfile.lock` in the disposable fixture before the run. If it is unavailable or incompatible with Ruby 3.2.3, select another exact release, record why, and use that lockfile for every repeat. |
-| Ruby / Bundler | Ruby `3.2.3`, Bundler `2.4.20` | Matches the current AgentForge workstation toolchain; record the actual versions. |
+| Podman | `4.9.3+ds1-1ubuntu0.2` | Validated rootless with the `docker_exp` provider and the owner-restricted Phase 5a API service. |
+| Litmus | `puppet_litmus` gem `2.8.2` | Locked in the Phase 5a fixture and validated with PDK-managed Bundler. |
+| PDK / Ruby / Bundler | PDK `4.0.1`; observed managed Ruby `3.2.11` / Puppet `8.22.0`; Bundler `2.4.20` | Record the versions reported by the tested PDK and locked fixture; PDK's managed runtime is distinct from system Ruby. |
+| Native build tools | `build-essential` `12.10ubuntu1` | Required to compile native gem extensions during `pdk bundle install`; system `ruby-dev` packages are not required. |
 | Puppet Agent | Exact version required by the synthetic fixture, preinstalled in the pinned target image | Record the target image digest and Agent version. Do not fetch protected packages from a target at runtime. |
 
-The Podman package candidate above was observed in the local Ubuntu Noble package metadata during preparation; it has not been installed or validated on a VM. The Litmus candidate is a starting point for the experiment, not a claim that it is the latest release. Pin every resolved Ruby dependency and target image by exact version/digest in the validation record.
+The exact Podman, PDK, Ruby, Bundler, Litmus, and target-image findings are recorded in the [Phase 5a validation report](phase5a-validation-report.md). Pin every resolved Ruby dependency and target image by exact version/digest in the validation record.
 
 ## Required kernel and host configuration
 
@@ -67,19 +70,19 @@ For this dedicated VM only:
 - Ubuntu 24.04 may restrict unprivileged user namespaces through AppArmor. Prefer a narrowly scoped AppArmor rule for the validation account/programs. If that cannot be made reliable, `kernel.apparmor_restrict_unprivileged_userns=0` may be used only on this disposable VM after recording the security trade-off. Never apply this change to a shared host or the normal AgentForge workstation.
 - Do not change unrelated namespace, network, or privilege sysctls to make a failing test pass.
 
-Use a dedicated unprivileged account, for example `agentforge-validate`. It must not be UID 0 and must not have `sudo` access during test execution. Allocate non-overlapping subordinate ID ranges in `/etc/subuid` and `/etc/subgid`; the example below uses 65,536 IDs and is illustrative only:
+Use the dedicated unprivileged `agentforge-acceptance` account (UID/GID `999:987`) prepared by `scripts/acceptance/setup-identity.sh`. It uses `/var/lib/agentforge-acceptance` with mode `0700`, has no supplementary groups or interactive login, and does not receive `sudo` access. The operator invokes the wrapper with `sudo`; the wrapper stages the fixture and switches to this account for PDK and Podman API client work. Its non-overlapping subordinate UID/GID ranges are `165536:65536`:
 
 ```text
-agentforge-validate:100000:65536
+agentforge-acceptance:165536:65536
 ```
 
-Choose ranges that do not overlap any existing mapping. Verify both files and the resulting maps before starting Podman. Rootless image storage must remain under this account's private home; do not share its home, storage, or runtime directory with the workstation.
+Verify both files and the resulting maps before starting Podman. The Phase 5a graphroot is `/var/lib/agentforge-acceptance/podman-storage-phase5a-reconcile`; do not reuse, delete, or migrate the previous graphroot.
 
 ## Provisioning guide
 
 1. Create a clean Ubuntu Server 24.04 LTS VM with the resources above. Disable shared folders, host-home mounts, clipboard/file sharing, and nested virtualization unless separately required. Do not attach the normal workstation's Docker or Podman socket.
 2. Create the dedicated validation account and assign non-overlapping subordinate UID/GID ranges. Configure only the namespace sysctls required by the kernel on this VM.
-3. Install Podman and rootless dependencies. Confirm the exact package version before proceeding:
+3. Use the approved PDK-enabled host/validation environment (PDK 4.0.1 and `build-essential` must be available to the wrapper), then install Podman and rootless dependencies. Confirm the exact package version before proceeding:
 
    ```sh
    sudo apt-get update
@@ -87,33 +90,31 @@ Choose ranges that do not overlap any existing mapping. Verify both files and th
    sudo apt-get install -y \
      podman=4.9.3+ds1-1ubuntu0.2 \
      uidmap slirp4netns fuse-overlayfs netavark aardvark-dns crun \
-     ruby3.2 ruby3.2-dev build-essential \
+     build-essential=12.10ubuntu1 \
      git curl ca-certificates jq
    ```
 
    If the exact Podman version is no longer available, stop and update this validation record with the proposed replacement; do not allow APT to silently select another version. Do not install Docker Engine, Docker CLI, `docker.io`, or a Docker socket.
-4. Install Bundler `2.4.20` for the validation account. Keep gems and caches in that account's private home or a disposable VM-local path. Do not put credentials in the fixture, environment, logs, or cache.
+4. Stage the locked fixture and install its bundle through the acceptance wrapper. The wrapper copies only `acceptance/fixture` into the acceptance identity's private home and invokes PDK as that identity. Do not run PDK directly from the normal workstation context or modify the repository lockfile.
 
    ```sh
-   gem install --user-install bundler --version 2.4.20 --no-document
-   export PATH="$(ruby -e 'print Gem.user_dir')/bin:$PATH"
-   bundle _2.4.20_ --version
+   sudo scripts/acceptance/run-pdk-litmus.sh stage
+   sudo scripts/acceptance/run-pdk-litmus.sh install
+   sudo scripts/acceptance/run-pdk-litmus.sh versions
    ```
 
-5. Create a disposable fixture outside the AgentForge source checkout. Generate a minimal Puppet module, add `puppet_litmus` at the candidate exact version, resolve dependencies, and retain the generated `Gemfile.lock` with the run record. Do not add the fixture or its lockfile to this repository as an implementation change.
+5. Keep the staged fixture disposable and outside the AgentForge source checkout. Use its existing `Gemfile.lock` with `puppet_litmus` 2.8.2; do not resolve a different dependency set or change the committed lockfile.
 6. Prepare one pinned, disposable Linux target image that already contains the exact Puppet Agent version required by the fixture. The image must not require protected Puppet repository credentials at startup. Record the full image digest.
 7. Allow egress only as needed for Ubuntu packages, RubyGems, and the selected OCI registry. No GitHub CLI login, GitHub token, MCP server, Copilot authentication, Puppet repository credential, or unrelated provider credential is needed for this local compatibility test.
 8. Record the VM image, kernel, Podman, Ruby, Bundler, Litmus lockfile, target-image digest, and sysctl state before testing.
 
-If the selected Litmus provider requires the Podman Docker-compatible API, start the **rootless per-user Unix socket only inside this dedicated VM**, for the duration of a run:
+For the Phase 5a fixture, start the **rootless Unix API socket only inside the dedicated acceptance environment** using the wrapper. It invokes the existing service helper, which uses a fresh disposable graphroot and matching runroot; do not reuse or delete the previous graphroot:
 
 ```sh
-systemctl --user start podman.socket
-test -S "$XDG_RUNTIME_DIR/podman/podman.sock"
-export DOCKER_HOST="unix://$XDG_RUNTIME_DIR/podman/podman.sock"
+sudo scripts/acceptance/run-pdk-litmus.sh start-provider
 ```
 
-`DOCKER_HOST` must point only to this Podman socket; it must not be used to configure or reach Docker Engine. Do not bind the socket to TCP, forward it to the host, mount it into an AgentForge workstation, or enable a persistent/lingering service. Stop the socket after the run. If the provider cannot use the local rootless socket without Docker Engine or a privileged daemon, record the blocker and stop; do not weaken the boundary.
+The wrapper gives the staged Litmus process only the fixed `DOCKER_HOST` for this Podman socket; it does not inherit workstation environment variables. Do not bind the socket to TCP, forward it to another host, mount it into a normal workstation service or target, or enable a persistent/lingering service. Stop the service after teardown. If the provider cannot use the local rootless socket without Docker Engine or a privileged daemon, record the blocker and stop; do not weaken the boundary.
 
 ## Validation checklist
 
@@ -128,42 +129,52 @@ export DOCKER_HOST="unix://$XDG_RUNTIME_DIR/podman/podman.sock"
 
 ### B. Rootless Podman
 
-Run as `agentforge-validate`, never through `sudo`:
+Run the identity check and inspect the configured rootless API through the wrapper:
 
 ```sh
-unshare -Ur true
-podman info --format '{{.Host.Security.Rootless}}'
-podman info --debug
-podman unshare cat /proc/self/uid_map
-podman unshare cat /proc/self/gid_map
-podman run --rm --pull=never --network=none "$PINNED_TEST_IMAGE" id
-podman ps -a
+sudo runuser --user agentforge-acceptance -- /usr/bin/unshare -Ur true
+sudo scripts/acceptance/run-pdk-litmus.sh start-provider
+sudo scripts/acceptance/run-pdk-litmus.sh info
 ```
 
-Pull the already selected digest-pinned test image before the `--pull=never` run. Confirm that Podman reports rootless mode, the UID/GID maps include the account and its subordinate range, and the container runs without root privileges on the host. Record the storage driver and rootless network backend. Confirm no target remains after `--rm`.
+Confirm that the API reports rootless operation, the expected UID/GID mappings, graphroot `/var/lib/agentforge-acceptance/podman-storage-phase5a-reconcile`, and runroot `/run/agentforge-acceptance/999/phase5a/containers`. The service helper verifies the owner-only Unix socket, delegated cgroup, and API response. Do not query or mutate the previous graphroot.
 
-If Litmus needs the Podman API, start the user socket on demand and verify its path is under `$XDG_RUNTIME_DIR/podman/`. Stop it after the Litmus run. Never use a TCP listener.
+The runroot mismatch is resolved for the validated service configuration by pairing the new disposable graphroot with its configured runroot. `podman info` passed before and after the service restart; startup and shutdown passed, and the existing graphroot was not modified or deleted.
+
+The service remains active for the Litmus run. Stop it only after Litmus teardown and after the wrapper confirms the target inventory is empty. Never use a TCP listener.
 
 ### C. Litmus lifecycle
 
 Use only the disposable fixture and the locked dependency set. First list the tasks provided by the pinned release:
 
 ```sh
-export BUNDLE_PATH="$HOME/.cache/agentforge-litmus"
-bundle check
-bundle exec rake -T litmus
+sudo scripts/acceptance/run-pdk-litmus.sh install
+sudo scripts/acceptance/run-pdk-litmus.sh list
 ```
 
-The fixture must expose the equivalent of these lifecycle operations; exact task names are release-defined and must be taken from `rake -T litmus` rather than assumed:
+The pinned fixture exposes these lifecycle operations:
 
-1. Provision one target using rootless Podman.
-2. Install/use the pinned Puppet Agent in that target.
-3. Install the fixture module and apply its minimal manifest.
-4. Run its RSpec acceptance example.
-5. Collect the test report and relevant target output.
-6. Tear down the target, including after a deliberately induced test failure.
+1. Provision one target using rootless Podman with `sudo scripts/acceptance/run-pdk-litmus.sh provision`.
+2. Check connectivity with `sudo scripts/acceptance/run-pdk-litmus.sh connectivity`.
+3. Apply the fixture and run its RSpec acceptance example with `sudo scripts/acceptance/run-pdk-litmus.sh acceptance`.
+4. Collect the test report and relevant target output.
+5. Tear down the target with `sudo scripts/acceptance/run-pdk-litmus.sh teardown`. The wrapper attempts teardown automatically when the acceptance task fails; verify that cleanup succeeded and invoke the explicit teardown action if it did not.
+6. After confirming teardown, remove only the staged fixture with the wrapper's `clean` action, then stop the provider service with `stop-provider`.
 
 Record the exact commands, provider configuration, task names, duration, exit status, target ID, and artifact paths. The test should assert one harmless managed resource and verify the resulting state on the target. Do not use production module code or real secrets.
+
+The underlying PDK-managed Litmus task sequence is:
+
+```sh
+pdk bundle install
+pdk bundle exec rake 'litmus:provision[provisioner,platform,inventory_vars]'
+pdk bundle exec rake litmus:install_agent
+pdk bundle exec rake litmus:install_module
+pdk bundle exec rake litmus:acceptance:parallel
+pdk bundle exec rake litmus:tear_down
+```
+
+Run these only as the dedicated acceptance identity inside the wrapper-controlled boundary, never directly from the normal workstation. The configured Phase 5a fixture uses the `provision.yaml` target list, so the wrapper maps its `provision` action to `pdk bundle exec rake 'litmus:provision_list[phase5a]'`. Its `acceptance` action invokes `pdk bundle exec rake litmus:acceptance:parallel`, and `teardown` invokes `pdk bundle exec rake litmus:tear_down`; a failed acceptance task triggers an automatic teardown attempt. The wrapper exposes the configured workflow, not separate `install_agent` or `install_module` actions.
 
 ### D. Reproducibility and boundaries
 
@@ -179,10 +190,9 @@ Record the exact commands, provider configuration, task names, duration, exit st
 | Check | Expected result |
 | --- | --- |
 | `unshare -Ur true` | Exit status `0`; no `Operation not permitted`. |
-| `podman info --format '{{.Host.Security.Rootless}}'` | `true`. |
-| `podman info --debug` | Rootless store under the validation account's home; supported storage and network backends; cgroup v2/systemd reported. |
-| UID/GID maps | Container UID/GID 0 maps to the unprivileged validation account; additional range maps from the allocated subordinate IDs. |
-| Pinned test container | Starts and exits successfully; host process remains owned by the validation account; no Docker service is used. |
+| `run-pdk-litmus.sh info` | Rootless API reports graphroot `/var/lib/agentforge-acceptance/podman-storage-phase5a-reconcile`, runroot `/run/agentforge-acceptance/999/phase5a/containers`, and cgroup v2. |
+| UID/GID maps | Container UID/GID 0 maps to `agentforge-acceptance`; subordinate range begins at 165536. |
+| Litmus target | The fixture target provisions through the rootless Podman API; no Docker service is used. |
 | Litmus provision/apply/test | One target provisions; Puppet apply succeeds; the focused RSpec acceptance test passes; artifacts are collected. |
 | Teardown | Target and its run-specific resources are absent after success and induced failure. |
 | Repeated runs | Three serial runs pass with identical versions/digests and no unexplained resource or state drift. |
@@ -195,9 +205,9 @@ Record the exact commands, provider configuration, task names, duration, exit st
 | `unshare -Ur true` returns `Operation not permitted` | User namespaces blocked by kernel, sysctl, AppArmor, or VM policy | Check `sysctl` values, kernel namespace support, audit/AppArmor denial logs, and whether the command runs as the dedicated non-root user. Do not test by disabling host security globally. |
 | `newuidmap` / `newgidmap` fails or maps only one ID | Missing `uidmap`, missing/non-overlapping `/etc/subuid` or `/etc/subgid` entry | Check `command -v newuidmap newgidmap`, exact account entries, overlap, and `podman unshare ..._map`. |
 | Podman says `cannot clone`, `cannot setup namespace`, or `permission denied` | Namespace restrictions or rootless identity/mapping setup | Run `unshare` first; inspect sysctls and audit logs. Do not use `sudo podman` as a workaround. |
-| Storage fails with overlay mount errors | Kernel OverlayFS support or rootless storage driver | Check `podman info --debug`, `fuse-overlayfs`, and the account's private storage permissions. Retry with the supported rootless fallback only after recording the change. |
+| Storage fails with overlay mount errors | Kernel OverlayFS support or rootless storage driver | Capture `sudo scripts/acceptance/run-pdk-litmus.sh info`, inspect `fuse-overlayfs` and the configured storage paths, and record any change before retrying. |
 | Network target cannot resolve or connect | Missing/incompatible `slirp4netns`, `pasta`, `netavark`, or `aardvark-dns`; egress policy | Record the selected backend and test an isolated disposable target. Do not add broad host networking or privileged mode. |
-| Litmus has no provision task/provider or cannot connect | Litmus version/provider mismatch or Podman API incompatibility | Capture `bundle exec rake -T litmus`, locked gem versions, provider config, and sanitized error. Stop if resolution requires Docker Engine, a privileged daemon, or workstation socket access. |
+| Litmus has no provision task/provider or cannot connect | Litmus version/provider mismatch or Podman API incompatibility | Capture `sudo scripts/acceptance/run-pdk-litmus.sh list`, locked gem versions, provider config, and sanitized error. Stop if resolution requires Docker Engine, a privileged daemon, or workstation socket access. |
 | Puppet apply or RSpec fails after successful provisioning | Fixture, target image, Puppet Agent, or module compatibility issue | Preserve sanitized task output, target image digest, Agent version, and collected artifacts; classify separately from Podman provisioning. |
 | Target remains after teardown or interrupted run | Cleanup/recovery defect | Record target/container/network/volume IDs and remove only the run-specific resources. If cleanup cannot be proven, destroy the disposable VM. |
 
@@ -205,16 +215,16 @@ Never include secrets or authentication output in diagnostics. Redact environmen
 
 ## Rollback and cleanup
 
-1. Stop Litmus, acceptance-test, and Podman API processes. Stop the rootless socket if it was started:
+1. Run Litmus teardown even after a test failure, then clean the staged fixture and stop the transient Phase 5a Podman API service:
 
    ```sh
-   if systemctl --user is-active --quiet podman.socket; then
-     systemctl --user stop podman.socket
-   fi
+   sudo scripts/acceptance/run-pdk-litmus.sh teardown
+   sudo scripts/acceptance/run-pdk-litmus.sh clean
+   sudo scripts/acceptance/run-pdk-litmus.sh stop-provider
    ```
 
-2. Remove only resources labeled or named for this validation run. Verify `podman ps -a`, `podman network ls`, and `podman volume ls` show no run resources. If their ownership is unclear, do not delete unrelated resources; destroy the dedicated VM instead.
-3. Remove the disposable fixture and its temporary gem cache after exporting sanitized reports and version/digest records.
+2. The wrapper's `clean` and `stop-provider` actions verify that no containers remain. Preserve the reconciled graphroot and target image; do not remove or migrate the previous graphroot.
+3. Use the wrapper to remove only the staged fixture after exporting sanitized reports and version/digest records. Keep the private PDK gem cache unless its cleanup is separately approved.
 4. Revert any VM-local sysctl or AppArmor override. Confirm no override was applied to the hypervisor or another shared host.
 5. If the VM will not be reused, delete the VM, attached disks, snapshots, and any temporary firewall rules. Do not retain snapshots containing test artifacts.
 6. If subordinate ID entries are to be removed from a reused VM, first stop all rootless processes and verify no container storage or processes remain for that account.

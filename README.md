@@ -2,7 +2,7 @@
 
 AgentForge is a persistent development workstation for AI agents using GitHub Copilot CLI and Puppet module tooling. It is designed to preserve useful working state across sessions, not to act as a disposable CI runner.
 
-The repository includes the Phase 2 workstation foundation, Phase 3 Copilot workstation, and Phase 4 Puppet module workflows. PDK 4.0.1 is downloaded during the image build using a BuildKit secret; Puppet repository credentials are not available to runtime containers. Copilot CLI 1.0.112 is installed with Node.js 22.23.5. Under ADR-0005, Level 1 authentication is operator-initiated and ephemeral; only approved settings and session data persist in a separate host state path. Puppet module workflows pin Ruby 3.2.3 and Bundler 2.4.20 and scope Bundler caches per module. A global Puppet Agent, GitHub CLI authentication, Docker daemon access, and MCP servers remain absent.
+The repository includes the Phase 2 workstation foundation, Phase 3 Copilot workstation, and Phase 4 Puppet module workflows. PDK 4.0.1 is downloaded during the image build using a BuildKit secret; Puppet repository credentials are not available to runtime containers. Copilot CLI 1.0.112 is installed with Node.js 22.23.5. Under ADR-0005, Level 1 authentication is operator-initiated and ephemeral; only approved settings and session data persist in a separate host state path. Normal workstation module-development workflows pin system Ruby 3.2.3 and Bundler 2.4.20 and scope Bundler caches per module. The separate Phase 5a acceptance workflow uses PDK-managed Ruby and Bundler inside the dedicated acceptance boundary. A global Puppet Agent, GitHub CLI authentication, Docker daemon access, and MCP servers remain absent.
 
 ## What AgentForge is intended to support
 
@@ -22,7 +22,8 @@ The repository includes the Phase 2 workstation foundation, Phase 3 Copilot work
 - [Toolchain versions](docs/toolchain-versions.md) — selected versions, evidence, and deferred toolchain choices.
 - [Setup](docs/setup.md) — prerequisites, host paths, build, and startup.
 - [Puppet development](docs/puppet-development.md) — module bootstrap, Bundler, PDK validation, unit tests, version policy, and recovery.
-- [Acceptance testing design](docs/acceptance-testing.md) — Phase 5 provider comparison, proposed architecture, security boundary, and roadmap.
+- [Acceptance testing design](docs/acceptance-testing.md) — validated Phase 5a PDK-managed Litmus workflow, Phase 5 provider comparison, security boundary, and roadmap.
+- [Phase 5a validation report](docs/phase5a-validation-report.md) — historical system-Bundler evidence and subsequent PDK-managed validation results.
 - [Operations](docs/operations.md) — persistence, rebuilds, caches, and upgrade guidance.
 - [Troubleshooting](docs/troubleshooting.md) — diagnostics and common failures.
 - [Roadmap](docs/roadmap.md) — phased implementation sequence and completion criteria.
@@ -39,7 +40,7 @@ A previous Compose probe showed that file-backed runtime secret metadata does no
 
 Permission levels are cumulative only when explicitly granted: read-only (Level 0), development (Level 1), remote collaboration (Level 2), and maintainer operations (Level 3). The default is Level 0. Initialize the workspace/cache and Copilot state with the scripts documented in [Setup](docs/setup.md), then start the desired profile with `docker compose -f compose/compose.yaml --profile level0 run --rm agent-level0` or Level 1. See [Compose guidance](compose/README.md).
 
-The toolchain uses exact version pins updated deliberately. Persistent caches are selective and scoped by user/project and trust level. Phase 5 acceptance testing has been operationally validated using Litmus 2.8.2 with both a rootless Podman-based container path (Phase 5a) and a Vagrant/libvirt-based VM path (Phase 5b compatibility validation). Beaker remains a compatibility path for modules that require an existing Beaker workflow and is not a default dependency.
+The toolchain uses exact version pins updated deliberately. Persistent caches are selective and scoped by user/project and trust level. Phase 5a Litmus 2.8.2 is operationally validated with PDK 4.0.1, its managed Ruby 3.2.11, Bundler 2.4.20, the `docker_exp` provisioner, and rootless Podman. Phase 5b compatibility is separately validated through Vagrant/libvirt. The normal workstation does not execute acceptance tests; VS Code routes them through the acceptance wrapper to `agentforge-acceptance`. Beaker remains a compatibility path for modules that require an existing Beaker workflow and is not a default dependency.
 
 ## Contribution and source of truth
 
@@ -47,6 +48,6 @@ Treat the documents in `docs/` as the architectural source of truth until implem
 
 The Phase 2 workstation, Phase 3 Copilot foundation, and Phase 4 Puppet module workflows are implemented, with host-path initialization and startup diagnostics. The PDK build-only secret strategy in [ADR-0004](docs/adr/0004-pdk-installation-strategy.md) supersedes the earlier runtime-install approach in ADR-0002 and ADR-0003. The protected PDK build was previously validated with authorized credentials; it has not been rerun in the current environment because no external credential source is available. Successful Copilot login and reauthentication after container recreation remain future operational checks. Puppet 8 is the recommended module target major, but a system Puppet Agent remains deferred until a module requires an exact package pin.
 
-ADR-0006 is Accepted. Phase 5a is operationally validated with Litmus, rootless Podman, and the `docker_exp` provisioner. Phase 5b compatibility and integration validation is complete for the Vagrant/libvirt path, including VM lifecycle, Litmus provisioning, connectivity, teardown, and cleanup workflows. Phase 5b production hardening and operational controls described in ADR-0009 remain future work.
+ADR-0006 is Accepted. Phase 5a is operationally validated with PDK-managed Litmus, rootless Podman, and the `docker_exp` provisioner. The validated runtime is PDK 4.0.1 / Ruby 3.2.11 / Bundler 2.4.20 / Litmus 2.8.2; `build-essential` supports native gem compilation. Phase 5b compatibility and integration validation is complete for the Vagrant/libvirt path, including VM lifecycle, Litmus provisioning, connectivity, teardown, and cleanup workflows. Phase 5b production hardening and operational controls described in ADR-0009 remain future work.
 
 MCP remains disabled until a server and tool allowlist are explicitly reviewed.

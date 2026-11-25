@@ -2,11 +2,48 @@
 
 ## Status and scope
 
-This document records the Phase 5 design and validation status. Phase 5a container-based acceptance testing and Phase 5b VM-based acceptance-testing compatibility validation have both completed successfully. The Phase 5a acceptance identity, transient delegated Podman API helper, and synthetic Litmus fixture are present. A finite `--pids-limit=1024` resolved the observed zero-limit behavior; four serial minimal Puppet apply/assertion runs passed, a controlled assertion failure was detected and torn down, and a fresh subsequent run passed. The [Phase 5a validation report](phase5a-validation-report.md) records the cleanup evidence.
+This document records the Phase 5 design and validation status. Phase 5a container-based acceptance testing and Phase 5b VM-based acceptance-testing compatibility validation have both completed successfully. The Phase 5a acceptance identity, transient delegated Podman API helper, and synthetic Litmus fixture are present. **The initial Phase 5a execution evidence used system Ruby/Bundler**: a finite `--pids-limit=1024` resolved the observed zero-limit behavior; four serial minimal Puppet apply/assertion runs passed, a controlled assertion failure was detected and torn down, and a fresh subsequent run passed. The later PDK-managed results are recorded separately below and in the [Phase 5a validation report](phase5a-validation-report.md).
 
 ADR-0006 is Accepted. Phase 5a is operationally validated. Phase 5b architecture, provider selection, VM lifecycle validation, and Litmus integration validation are documented in ADR-0009 and the associated Phase 5b validation reports.
 
 The design preserves ADR-0004's build-only Puppet repository secret boundary and ADR-0005's ephemeral Copilot authentication.
+
+### PDK-managed Litmus compatibility
+
+The Phase 5a fixture uses PDK-managed Bundler through `scripts/acceptance/run-pdk-litmus.sh`. The wrapper stages only the fixture under the acceptance identity's private home and invokes PDK as `agentforge-acceptance` with an environment allowlist. The validated runtime is PDK 4.0.1, PDK-managed Ruby 3.2.11, Bundler 2.4.20, and Litmus 2.8.2. The `docker_exp` provider, target configuration, acceptance scope, and lockfiles were unchanged. Two one-example PDK-managed acceptance runs passed; a controlled assertion failure triggered automatic teardown and returned nonzero.
+
+The workstation base includes `build-essential` 12.10ubuntu1. Its compiler and `make` allowed native extensions `nkf`, `bigdecimal`, `io-console`, `json`, and `stringio` to compile; PDK supplies its managed Ruby headers, so system `ruby-dev` is not required. This validates the current synthetic Phase 5a fixture, not other PDK runtimes, modules, or providers. Earlier repeated-run evidence using system Ruby/Bundler remains historical and separate from the subsequent PDK-managed results.
+
+The validated operational path is:
+
+```text
+VS Code
+  ↓
+Acceptance wrapper
+  ↓
+agentforge-acceptance
+  ↓
+PDK
+  ↓
+Litmus
+  ↓
+Podman API
+```
+
+The wrapper is the supported entry point; do not run the commands below from the normal workstation. They describe the PDK-managed Litmus task sequence inside the dedicated acceptance boundary:
+
+```sh
+pdk bundle install
+pdk bundle exec rake 'litmus:provision[provisioner,platform,inventory_vars]'
+pdk bundle exec rake litmus:install_agent
+pdk bundle exec rake litmus:install_module
+pdk bundle exec rake litmus:acceptance:parallel
+pdk bundle exec rake litmus:tear_down
+```
+
+For the committed Phase 5a fixture, `provision.yaml` selects `docker_exp` and the `phase5a` target. Accordingly, the wrapper's `provision` action invokes `pdk bundle exec rake 'litmus:provision_list[phase5a]'`; the wrapper's install, acceptance, and teardown actions run PDK-managed bundle commands. The wrapper does not expose the individual `install_agent` and `install_module` tasks as separate actions. Failure during acceptance triggers an automatic teardown attempt. The lockfile and target configuration are checked/preserved by the wrapper.
+
+The Phase 5a Podman runroot mismatch is resolved operationally: the API service now uses a new disposable graphroot with the matching runroot, leaving the previous graphroot untouched. Podman info, service startup, shutdown, restart, and post-restart info checks passed. See the [Phase 5a validation report](phase5a-validation-report.md) for run details. The successful PDK-managed validation adds to, rather than rewrites, the historical system-Bundler evidence.
 
 The dedicated VM specification, provisioning guide, validation checklist, and diagnostics are in [Acceptance Testing Validation Phase 1](acceptance-validation-phase1.md). ADR-0006 is Accepted; Phase 5a validation evidence is recorded in the [Phase 5a validation report](phase5a-validation-report.md).
 
@@ -87,11 +124,8 @@ The Phase 5a and Phase 5b validation paths are separate from the normal Level 0/
 - Failure and interruption paths report and clean up resources; the run leaves no credentials or unintended target state behind.
 - The existing Level 0/Level 1 Compose profiles remain unchanged.
 
-## Open decisions
+## Remaining compatibility decisions
 
-- Which module or synthetic acceptance fixture should be the compatibility test?
-- Does the selected Litmus release work correctly with a rootless Podman API/provider, including service startup and teardown?
-- Should the isolated provider boundary be a dedicated host account/service or a separate disposable VM on operators without an external provider?
-- Which target OS and exact Puppet Agent version are required by the first supported module?
+- Which real module-specific suites, target operating systems, and exact Puppet Agent versions need validation beyond the synthetic Phase 5a target and Phase 5b compatibility path?
 - Is a Beaker compatibility harness required by a specific maintained Forge module?
 - Is EC2 necessary for any module's supported target matrix, and what short-lived identity mechanism and spend limits are acceptable?

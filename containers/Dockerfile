@@ -10,7 +10,8 @@ RUN apt-get update \
         ca-certificates=20260816ubuntu0.24.04.2 \
         curl=8.5.0-2ubuntu10.16 \
         git=1:2.43.0-1ubuntu7.4 \
-        ruby3.2=3.2.3-1ubuntu0.24.04.8 \
+        build-essential=12.10ubuntu1 \
+        ruby3.2=3.2.3-1ubuntu0.24.04.9 \
     && curl --fail --location --silent --show-error \
         --output /tmp/puppet8-release-noble.deb \
         https://apt-puppetcore.puppet.com/public/puppet8-release-noble.deb \

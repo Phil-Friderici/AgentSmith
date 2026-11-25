@@ -6,6 +6,8 @@
 - Result: Blocked before VM provisioning
 - Recommendation: **C — Phase 5b is not currently viable on this execution environment**
 
+This is a historical, host-specific Phase 5b preflight. Its failed `bundle exec litmus --version` check describes the absence of a Gemfile in that checkout, not the current Phase 5a workflow, which uses PDK-managed Bundler through the acceptance wrapper. See the [Phase 5a validation report](phase5a-validation-report.md) for that separate evidence.
+
 ## Summary
 
 The read-only prerequisite checks found working Vagrant and VirtualBox installations and exposed nested virtualization support. They did not establish the required dedicated controller/worker environment. The current host reports Amazon virtualization, the session environment may be shared, the current user has broad host groups, and no isolated acceptance worker is available. The AgentSmith checkout also has no Gemfile/lockfile to execute the Litmus bundle; although `puppet_litmus` 2.8.2 is installed as a system gem, the protocol's `bundle exec litmus --version` command fails.

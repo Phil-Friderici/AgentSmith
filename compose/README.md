@@ -25,7 +25,9 @@ Permission profiles correspond to actual capability changes: filesystem access, 
 
 The host UID/GID must be supplied explicitly. Level 0 mounts the workspace read-only, has no network, and uses a read-only container filesystem. Level 1 mounts the workspace writable and uses the configured cache path, defaulting to `~/AgentForge/cache/agentforge/level1`; override it with a project- and trust-level-specific path. It has network access but no remote credentials. Both services drop all Linux capabilities, prohibit privilege escalation, and have no Docker socket. MCP is not configured or started in either profile.
 
-No acceptance-testing profile currently exists. Proposed Phase 5 uses Litmus with an isolated rootless Podman provider, but no provider service, Podman socket, Docker socket, `/dev/kvm`, target image, or acceptance credential is configured. See [Puppet Acceptance Testing Design](../docs/acceptance-testing.md) and Proposed [ADR-0006](../docs/adr/0006-acceptance-testing-platform.md).
+Phase 5a acceptance testing is complete and operationally validated. Acceptance execution does not run inside a Compose workstation profile: a host-side `scripts/acceptance/run-pdk-litmus.sh` wrapper stages the fixture and invokes PDK as the dedicated `agentforge-acceptance` identity. The rootless Podman API service runs outside the normal workstation container and is available only through the dedicated acceptance boundary.
+
+Container runtimes are intentionally unavailable in Level 1: the workstation includes neither the Docker nor Podman CLI/runtime, receives no runtime socket, and cannot control the host's container engine. Use the host-side acceptance wrapper for Litmus work rather than adding runtime access to the normal workstation. See [Puppet Acceptance Testing Design](../docs/acceptance-testing.md), the [Phase 5a validation report](../docs/phase5a-validation-report.md), and Accepted [ADR-0006](../docs/adr/0006-acceptance-testing-platform.md).
 
 The disabled Phase 7a/7b maintainer broker uses a separate, opt-in Compose file and is not part of the workstation profiles:
 

@@ -45,6 +45,26 @@ contains_auth_settings() {
     fi
 }
 
+contains_signed_in_accounts() {
+    local path="$1"
+    local status
+
+    if grep --recursive --files-with-matches --binary-files=without-match \
+        --include='*.json' --exclude='*.schema.json' \
+        --ignore-case --extended-regexp \
+        '"signed[_-]?in[_-]?accounts"[[:space:]]*:' \
+        "$path" >/dev/null 2>&1; then
+        fail "signed-in account state found under a workspace or cache path"
+        return 1
+    else
+        status=$?
+        if (( status != 1 )); then
+            fail "unable to inspect workspace or cache for signed-in account state"
+            return 1
+        fi
+    fi
+}
+
 check_private_path() {
     local path="$1"
     local owner mode
@@ -196,7 +216,9 @@ check_workspace_or_cache() {
         fail "Copilot authentication path or file found in workspace or cache"
         return 1
     fi
-    contains_auth_settings "$root" || return 1
+    # Workspace and cache contain source/configuration examples; scan their
+    # contents for token values and Copilot's specific persisted login marker.
+    contains_signed_in_accounts "$root" || return 1
     contains_github_token "$root"
 }
 

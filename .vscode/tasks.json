@@ -1,0 +1,173 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Phase 5a: Stage fixture for acceptance identity",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "stage"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Install PDK-managed bundle",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "install"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Record PDK runtime versions",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "versions"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: List Litmus tasks",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "list"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Start rootless Podman API",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "start-provider"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Inspect rootless Podman storage",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "info"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Provision target",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "provision"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Check connectivity",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "connectivity"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Run acceptance tests",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "acceptance"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Tear down targets",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "teardown"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Clean staged fixture",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "clean"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Phase 5a: Stop rootless Podman API",
+      "type": "process",
+      "command": "sudo",
+      "args": ["--", "${workspaceFolder}/scripts/acceptance/run-pdk-litmus.sh", "stop-provider"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

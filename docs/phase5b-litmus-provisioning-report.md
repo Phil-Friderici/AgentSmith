@@ -1,5 +1,7 @@
 # Phase 5b Litmus Provisioning Spike Report
 
+This report preserves the separate Phase 5b Vagrant/libvirt experiment and its Bundler-environment findings. The `bundle exec` references below describe that historical integration path, not the current Phase 5a PDK-managed workflow; see the [Phase 5a validation report](phase5a-validation-report.md).
+
 - Date: 2026-11-23
 - Scope: Litmus 2.8.2, Vagrant 2.4.9, `vagrant-libvirt` 0.12.2, one Ubuntu 22.04 VM
 - Initial result: **Provisioning and connectivity demonstrated with workarounds; default teardown reports failure after resource removal**
